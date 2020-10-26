@@ -1,0 +1,15 @@
+[package]
+name = "galloc"
+version = "0.1.0"
+authors = ["Zakarum <zakarumych@ya.ru>"]
+edition = "2018"
+
+[features]
+std = []
+# default = ["std"]
+
+[dependencies]
+galloc-types = { path = "../types", version = "0.1" }
+tracing = { version = "0.1", optional = true, default-features = false }
+bitflags = { version = "1.2", default-features = false }
+serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }

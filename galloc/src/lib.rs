@@ -4,17 +4,18 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-extern crate core;
+extern crate alloc;
 
 mod block;
 mod buddy;
 mod config;
-mod device;
 mod error;
 mod galloc;
+mod heap;
 mod linear;
-mod types;
 mod usage;
+
+pub use self::{config::*, error::*, galloc::*, usage::*};
 
 /// Possible requirements for dedicated memory object allocation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -66,10 +67,6 @@ pub struct Request {
     pub dedicated: Dedicated,
 }
 
-pub use self::{
-    buddy::*, config::*, device::*, error::*, galloc::*, linear::*, types::*, usage::*,
-};
-
 /// Aligns `value` up to `align_maks`
 /// Returns smallest integer not lesser than `value` aligned by `align_mask`.
 /// Returns `None` on overflow.
@@ -81,4 +78,36 @@ pub fn align_up(value: u64, align_mask: u64) -> Option<u64> {
 /// Returns largest integer not bigger than `value` aligned by `align_mask`.
 pub fn align_down(value: u64, align_mask: u64) -> u64 {
     value & !align_mask
+}
+
+/// Aligns `value` up to `align_maks`
+/// Returns smallest integer not lesser than `value` aligned by `align_mask`.
+/// Returns `None` on overflow.
+pub fn align_up_usize(value: usize, align_mask: usize) -> Option<usize> {
+    Some(value.checked_add(align_mask)? & !align_mask)
+}
+
+/// Align `value` down to `align_maks`
+/// Returns largest integer not bigger than `value` aligned by `align_mask`.
+pub fn align_down_usize(value: usize, align_mask: usize) -> usize {
+    value & !align_mask
+}
+
+fn greater<L, R>(l: L, r: R) -> bool
+where
+    R: core::convert::TryInto<L>,
+    L: PartialOrd,
+{
+    r.try_into().ok().map_or(false, |r| l > r)
+}
+
+fn min<L, R>(l: L, r: R) -> L
+where
+    R: core::convert::TryInto<L>,
+    L: Ord,
+{
+    match r.try_into() {
+        Ok(r) => core::cmp::min(l, r),
+        Err(_) => l,
+    }
 }

@@ -1,4 +1,4 @@
-use crate::types::{MemoryPropertyFlags, MemoryType};
+use galloc_types::{MemoryPropertyFlags, MemoryType};
 
 bitflags::bitflags! {
     /// Memory usage type.
@@ -100,7 +100,7 @@ fn one_usage(usage: UsageFlags, memory_types: &[MemoryType]) -> MemoryForOneUsag
     }
 
     types[..types_count as usize]
-        .sort_by_key(|&index| priority(usage, memory_types[index as usize].props));
+        .sort_unstable_by_key(|&index| priority(usage, memory_types[index as usize].props));
 
     let mask = types[..types_count as usize]
         .iter()

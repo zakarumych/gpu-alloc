@@ -21,6 +21,16 @@ pub struct Config {
     ///
     /// This won't make much sense if this value is lesser than `dedicated_treshold`.
     pub transient_dedicated_treshold: u64,
+
+    /// Size in bytes for chunks for linear allocator.
+    pub linear_chunk: u64,
+
+    /// Minimal size for buddy allocator.
+    pub minimal_buddy_size: u64,
+
+    /// Initial memory object size for buddy allocator.
+    /// If less than `minimal_buddy_size` then `minimal_buddy_size` is used instead.
+    pub initial_buddy_dedicated_size: u64,
 }
 
 impl Config {
@@ -39,6 +49,9 @@ impl Config {
             dedicated_treshold: potato.dedicated_treshold * 1024,
             preferred_dedicated_treshold: potato.preferred_dedicated_treshold * 1024,
             transient_dedicated_treshold: potato.transient_dedicated_treshold * 1024,
+            linear_chunk: potato.linear_chunk * 1024,
+            minimal_buddy_size: potato.minimal_buddy_size * 1024,
+            initial_buddy_dedicated_size: potato.initial_buddy_dedicated_size * 1024,
         }
     }
 
@@ -48,6 +61,9 @@ impl Config {
             dedicated_treshold: 32 * 1024,
             preferred_dedicated_treshold: 1024,
             transient_dedicated_treshold: 128 * 1024,
+            linear_chunk: 128 * 1024 * 1024,
+            minimal_buddy_size: 1,
+            initial_buddy_dedicated_size: 8 * 1024,
         }
     }
 }
