@@ -1,2 +1,2 @@
 [workspace]
-members = ["types", "galloc"]
+members = ["types", "galloc", "mock"]

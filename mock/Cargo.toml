@@ -1,0 +1,10 @@
+[package]
+name = "galloc-mock"
+version = "0.1.0"
+authors = ["Zakarum <zakarumych@ya.ru>"]
+edition = "2018"
+
+[dependencies]
+galloc-types = { path = "../types", version = "0.1" }
+tracing = { version = "0.1", features = ["attributes"] }
+slab = "0.4"
