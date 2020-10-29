@@ -1,11 +1,9 @@
 use {
     crate::{
-        align_up,
         block::{MemoryBlock, MemoryBlockFlavor},
         buddy::{BuddyAllocator, BuddyBlock},
         config::Config,
         error::AllocationError,
-        greater,
         heap::Heap,
         linear::{LinearAllocator, LinearBlock},
         usage::{MemoryForUsage, UsageFlags},
@@ -18,6 +16,7 @@ use {
     },
 };
 
+#[derive(Debug)]
 pub struct GpuAllocator<M> {
     dedicated_treshold: u64,
     preferred_dedicated_treshold: u64,
@@ -27,17 +26,26 @@ pub struct GpuAllocator<M> {
     memory_types: Box<[MemoryType]>,
     memory_heaps: Box<[Heap]>,
     allocations_remains: u32,
-    non_coherent_atom_mask: usize,
-    linear_allocators: Box<[LinearAllocator<M>]>,
-    buddy_allocators: Box<[BuddyAllocator<M>]>,
+    non_coherent_atom_mask: u64,
+    linear_chunk: u64,
+    minimal_buddy_size: u64,
+    initial_buddy_dedicated_size: u64,
+
+    linear_allocators: Box<[Option<LinearAllocator<M>>]>,
+    buddy_allocators: Box<[Option<BuddyAllocator<M>>]>,
 }
 
 impl<M> GpuAllocator<M> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub unsafe fn new(config: Config, props: DeviceProperties) -> Self {
+    pub fn new(config: Config, props: DeviceProperties) -> Self {
         assert!(
             props.non_coherent_atom_size.is_power_of_two(),
             "`non_coherent_atom_size` must be power of two"
+        );
+
+        assert!(
+            isize::try_from(props.non_coherent_atom_size).is_ok(),
+            "`non_coherent_atom_size` must fit host address space"
         );
 
         GpuAllocator {
@@ -56,39 +64,6 @@ impl<M> GpuAllocator<M> {
 
             max_memory_allocation_size: props.max_memory_allocation_size,
 
-            linear_allocators: props
-                .memory_types
-                .iter()
-                .enumerate()
-                .map(|(i, memory_type)| {
-                    LinearAllocator::new(
-                        config
-                            .linear_chunk
-                            .min(props.memory_heaps[memory_type.heap as usize].size / 32),
-                        i as u32,
-                        memory_type.props,
-                    )
-                })
-                .collect(),
-
-            buddy_allocators: props
-                .memory_types
-                .iter()
-                .enumerate()
-                .map(|(i, memory_type)| {
-                    BuddyAllocator::new(
-                        config
-                            .minimal_buddy_size
-                            .min(props.memory_heaps[memory_type.heap as usize].size / 1024),
-                        config
-                            .initial_buddy_dedicated_size
-                            .min(props.memory_heaps[memory_type.heap as usize].size / 32),
-                        i as u32,
-                        memory_type.props,
-                    )
-                })
-                .collect(),
-
             memory_for_usage: MemoryForUsage::new(props.memory_types),
 
             memory_types: props.memory_types.iter().copied().collect(),
@@ -99,8 +74,14 @@ impl<M> GpuAllocator<M> {
                 .collect(),
 
             allocations_remains: props.max_memory_allocation_count,
-            non_coherent_atom_mask: usize::try_from(props.non_coherent_atom_size - 1)
-                .expect("non_coherent_atom_size must fit into `usize`"),
+            non_coherent_atom_mask: props.non_coherent_atom_size - 1,
+
+            linear_chunk: config.linear_chunk,
+            minimal_buddy_size: config.minimal_buddy_size,
+            initial_buddy_dedicated_size: config.initial_buddy_dedicated_size,
+
+            linear_allocators: props.memory_types.iter().map(|_| None).collect(),
+            buddy_allocators: props.memory_types.iter().map(|_| None).collect(),
         }
     }
 
@@ -113,14 +94,10 @@ impl<M> GpuAllocator<M> {
     where
         M: Clone,
     {
+        request.usage = with_implicit_usage_flags(request.usage);
+
         if request.size > self.max_memory_allocation_size {
             return Err(AllocationError::OutOfDeviceMemory);
-        }
-
-        if request.usage.contains(UsageFlags::HOST_ACCESS) {
-            if greater(request.size, isize::max_value()) {
-                return Err(AllocationError::OutOfHostMemory);
-            }
         }
 
         if 0 == self.memory_for_usage.mask(request.usage) & request.memory_types {
@@ -168,23 +145,11 @@ impl<M> GpuAllocator<M> {
             let heap = memory_type.heap;
             let heap = &mut self.memory_heaps[heap as usize];
 
-            let mut map_mask = 0;
-            if memory_type
-                .props
-                .contains(MemoryPropertyFlags::HOST_VISIBLE)
-            {
-                if !memory_type
-                    .props
-                    .contains(MemoryPropertyFlags::HOST_COHERENT)
-                {
-                    request.align_mask |= self.non_coherent_atom_mask as u64;
-                    map_mask = self.non_coherent_atom_mask;
-                    match align_up(request.size, self.non_coherent_atom_mask as u64) {
-                        Some(size) => request.size = size,
-                        None => return Err(AllocationError::OutOfHostMemory),
-                    }
-                }
-            }
+            let map_mask = if host_visible_non_coherent(memory_type.props) {
+                self.non_coherent_atom_mask
+            } else {
+                0
+            };
 
             match strategy {
                 Strategy::Dedicated => {
@@ -220,7 +185,22 @@ impl<M> GpuAllocator<M> {
                     }
                 }
                 Strategy::Linear => {
-                    let allocator = &mut self.linear_allocators[index as usize];
+                    let allocator = match &mut self.linear_allocators[index as usize] {
+                        Some(allocator) => allocator,
+                        slot => {
+                            let memory_type = &self.memory_types[index as usize];
+                            slot.get_or_insert(LinearAllocator::new(
+                                self.linear_chunk.min(heap.size() / 32),
+                                index,
+                                memory_type.props,
+                                if host_visible_non_coherent(memory_type.props) {
+                                    self.non_coherent_atom_mask
+                                } else {
+                                    0
+                                },
+                            ))
+                        }
+                    };
                     let result = allocator.alloc(
                         device,
                         request.size,
@@ -251,7 +231,23 @@ impl<M> GpuAllocator<M> {
                     }
                 }
                 Strategy::Buddy => {
-                    let allocator = &mut self.buddy_allocators[index as usize];
+                    let allocator = match &mut self.buddy_allocators[index as usize] {
+                        Some(allocator) => allocator,
+                        slot => {
+                            let memory_type = &self.memory_types[index as usize];
+                            slot.get_or_insert(BuddyAllocator::new(
+                                self.minimal_buddy_size.min(heap.size() / 1024),
+                                self.initial_buddy_dedicated_size.min(heap.size() / 32),
+                                index,
+                                memory_type.props,
+                                if host_visible_non_coherent(memory_type.props) {
+                                    self.non_coherent_atom_mask
+                                } else {
+                                    0
+                                },
+                            ))
+                        }
+                    };
                     let result = allocator.alloc(
                         device,
                         request.size,
@@ -300,7 +296,9 @@ impl<M> GpuAllocator<M> {
                 let heap = self.memory_types[memory_type as usize].heap;
                 let heap = &mut self.memory_heaps[heap as usize];
 
-                let allocator = &mut self.linear_allocators[memory_type as usize];
+                let allocator = self.linear_allocators[memory_type as usize]
+                    .as_mut()
+                    .expect("Allocator should exist");
 
                 allocator.dealloc(
                     device,
@@ -320,7 +318,9 @@ impl<M> GpuAllocator<M> {
                 let heap = self.memory_types[memory_type as usize].heap;
                 let heap = &mut self.memory_heaps[heap as usize];
 
-                let allocator = &mut self.buddy_allocators[memory_type as usize];
+                let allocator = self.buddy_allocators[memory_type as usize]
+                    .as_mut()
+                    .expect("Allocator should exist");
 
                 allocator.dealloc(
                     device,
@@ -343,4 +343,19 @@ enum Strategy {
     Dedicated,
     Linear,
     Buddy,
+}
+
+fn host_visible_non_coherent(props: MemoryPropertyFlags) -> bool {
+    (props ^ MemoryPropertyFlags::HOST_COHERENT)
+        .contains(MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT)
+}
+
+fn with_implicit_usage_flags(usage: UsageFlags) -> UsageFlags {
+    if usage.is_empty() {
+        UsageFlags::FAST_DEVICE_ACCESS
+    } else if usage.intersects(UsageFlags::DOWNLOAD | UsageFlags::UPLOAD) {
+        usage | UsageFlags::HOST_ACCESS
+    } else {
+        usage
+    }
 }

@@ -1,10 +1,11 @@
 use {
-    crate::{align_up, error::AllocationError, heap::Heap, min, usage::UsageFlags},
+    crate::{align_up, error::AllocationError, heap::Heap, usage::UsageFlags},
     alloc::collections::VecDeque,
     core::{convert::TryFrom as _, ptr::NonNull},
     galloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
+#[derive(Debug)]
 pub(crate) struct LinearBlock<M> {
     pub memory: M,
     pub ptr: Option<NonNull<u8>>,
@@ -13,6 +14,7 @@ pub(crate) struct LinearBlock<M> {
     pub chunk: u64,
 }
 
+#[derive(Debug)]
 struct Chunk<M> {
     memory: M,
     offset: u64,
@@ -29,27 +31,36 @@ impl<M> Chunk<M> {
     }
 }
 
+#[derive(Debug)]
 struct ExhaustedChunk<M> {
     memory: M,
     allocated: u64,
 }
 
+#[derive(Debug)]
 struct Chunks<M> {
     ready: Option<Chunk<M>>,
     exhausted: VecDeque<Option<ExhaustedChunk<M>>>,
     offset: u64,
 }
 
+#[derive(Debug)]
 pub(crate) struct LinearAllocator<M> {
     chunks: Chunks<M>,
     chunks_unmapped: Chunks<M>,
     chunk_size: u64,
     memory_type: u32,
     props: MemoryPropertyFlags,
+    atom_mask: u64,
 }
 
 impl<M> LinearAllocator<M> {
-    pub unsafe fn new(chunk_size: u64, memory_type: u32, props: MemoryPropertyFlags) -> Self {
+    pub fn new(
+        chunk_size: u64,
+        memory_type: u32,
+        props: MemoryPropertyFlags,
+        atom_mask: u64,
+    ) -> Self {
         LinearAllocator {
             chunks: Chunks {
                 ready: None,
@@ -61,9 +72,10 @@ impl<M> LinearAllocator<M> {
                 exhausted: VecDeque::new(),
                 offset: 0,
             },
-            chunk_size: min(chunk_size, usize::max_value() >> 1),
+            chunk_size: min(chunk_size, isize::max_value()),
             memory_type,
             props,
+            atom_mask,
         }
     }
 
@@ -84,6 +96,8 @@ impl<M> LinearAllocator<M> {
             self.chunk_size < size,
             "GpuAllocator must not request allocations equal or greater to chunks size"
         );
+
+        let align_mask = align_mask | self.atom_mask;
 
         if self.host_visible() {
             if !usage.contains(UsageFlags::HOST_ACCESS) {
@@ -364,4 +378,15 @@ fn fits(chunk_size: u64, chunk_allocated: u64, size: u64, align_mask: u64) -> bo
     align_up(chunk_allocated, align_mask)
         .and_then(|aligned| aligned.checked_add(size))
         .map_or(false, |size| size < chunk_size)
+}
+
+fn min<L, R>(l: L, r: R) -> L
+where
+    R: core::convert::TryInto<L>,
+    L: Ord,
+{
+    match r.try_into() {
+        Ok(r) => core::cmp::min(l, r),
+        Err(_) => l,
+    }
 }

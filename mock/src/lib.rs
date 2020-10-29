@@ -54,7 +54,7 @@ impl MockMemoryDevice {
         }
     }
 
-    pub fn properties(&self) -> DeviceProperties<'_> {
+    pub fn props(&self) -> DeviceProperties<'_> {
         DeviceProperties {
             memory_types: &self.memory_types,
             memory_heaps: &self.memory_heaps,
@@ -139,7 +139,7 @@ impl MemoryDevice<usize> for MockMemoryDevice {
         );
         assert_ne!(size, 0, "Mapping size must be greater than 0");
         assert!(
-            size < memory.size - offset,
+            size <= memory.size - offset,
             "size must be less than or equal to the size of the memory minus offset"
         );
 

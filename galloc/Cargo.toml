@@ -6,7 +6,7 @@ edition = "2018"
 
 [features]
 std = []
-# default = ["std"]
+default = ["std"]
 
 [dependencies]
 galloc-types = { path = "../types", version = "0.1" }

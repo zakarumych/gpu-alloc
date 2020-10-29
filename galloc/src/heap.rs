@@ -16,6 +16,10 @@ impl Heap {
         }
     }
 
+    pub(crate) fn size(&mut self) -> u64 {
+        self.size
+    }
+
     pub(crate) fn budget(&mut self) -> u64 {
         self.size - self.used
     }

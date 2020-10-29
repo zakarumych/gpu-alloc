@@ -5,6 +5,7 @@ use {
     galloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
+#[derive(Debug)]
 pub(crate) struct BuddyBlock<M> {
     pub memory: M,
     pub ptr: Option<NonNull<u8>>,
@@ -13,30 +14,35 @@ pub(crate) struct BuddyBlock<M> {
     pub chunk: usize,
 }
 
+#[derive(Debug)]
 struct Size {
     freelist: Vec<(usize, u64)>,
 }
 
+#[derive(Debug)]
 struct Chunk<M> {
     memory: M,
     ptr: Option<NonNull<u8>>,
     _size: u64,
 }
 
+#[derive(Debug)]
 pub(crate) struct BuddyAllocator<M> {
     minimal_size: u64,
     chunks: Vec<Chunk<M>>,
     sizes: Vec<Size>,
     memory_type: u32,
     props: MemoryPropertyFlags,
+    atom_mask: u64,
 }
 
 impl<M> BuddyAllocator<M> {
-    pub unsafe fn new(
+    pub fn new(
         minimal_size: u64,
         initial_dedicated_size: u64,
         memory_type: u32,
         props: MemoryPropertyFlags,
+        atom_mask: u64,
     ) -> Self {
         assert!(
             minimal_size.is_power_of_two(),
@@ -61,6 +67,7 @@ impl<M> BuddyAllocator<M> {
                 .collect(),
             memory_type,
             props,
+            atom_mask: atom_mask | (minimal_size - 1),
         }
     }
 
@@ -76,7 +83,9 @@ impl<M> BuddyAllocator<M> {
     where
         M: Clone,
     {
-        let size = align_up(size, align_mask | self.minimal_size - 1)
+        let align_mask = align_mask | self.atom_mask;
+
+        let size = align_up(size, align_mask)
             .and_then(|size| size.checked_next_power_of_two())
             .ok_or(AllocationError::OutOfDeviceMemory)?;
 
