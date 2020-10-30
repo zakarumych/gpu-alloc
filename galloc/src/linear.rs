@@ -5,6 +5,12 @@ use {
     galloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
+#[cfg(feature = "tracing")]
+use core::fmt::Debug as MemoryBounds;
+
+#[cfg(not(feature = "tracing"))]
+use core::any::Any as MemoryBounds;
+
 #[derive(Debug)]
 pub(crate) struct LinearBlock<M> {
     pub memory: M,
@@ -54,7 +60,10 @@ pub(crate) struct LinearAllocator<M> {
     atom_mask: u64,
 }
 
-impl<M> LinearAllocator<M> {
+impl<M> LinearAllocator<M>
+where
+    M: MemoryBounds + 'static,
+{
     pub fn new(
         chunk_size: u64,
         memory_type: u32,
@@ -173,7 +182,7 @@ impl<M> LinearAllocator<M> {
                         Err(DeviceMapError::MapFailed) => {
                             if !usage.contains(UsageFlags::HOST_ACCESS) {
                                 #[cfg(feature = "tracing")]
-                                trace::warn!("Failed to host-visible memory in linear allocator. This request does not require host-access");
+                                tracing::warn!("Failed to map host-visible memory in linear allocator. This request does not require host-access");
 
                                 debug_assert!(self.chunks_unmapped.ready.is_none());
                                 let ready = self.chunks_unmapped.ready.get_or_insert(Chunk {
@@ -195,7 +204,9 @@ impl<M> LinearAllocator<M> {
                                 ))
                             } else {
                                 #[cfg(feature = "tracing")]
-                                trace::error!("Failed to host-visible memory in linear allocator");
+                                tracing::error!(
+                                    "Failed to map host-visible memory in linear allocator"
+                                );
                                 device.deallocate_memory(memory);
                                 *allocations_remains += 1;
                                 heap.dealloc(self.chunk_size);

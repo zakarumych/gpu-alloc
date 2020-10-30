@@ -5,6 +5,12 @@ use {
     galloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
+#[cfg(feature = "tracing")]
+use core::fmt::Debug as MemoryBounds;
+
+#[cfg(not(feature = "tracing"))]
+use core::any::Any as MemoryBounds;
+
 #[derive(Debug)]
 pub(crate) struct BuddyBlock<M> {
     pub memory: M,
@@ -36,7 +42,10 @@ pub(crate) struct BuddyAllocator<M> {
     atom_mask: u64,
 }
 
-impl<M> BuddyAllocator<M> {
+impl<M> BuddyAllocator<M>
+where
+    M: MemoryBounds + 'static,
+{
     pub fn new(
         minimal_size: u64,
         initial_dedicated_size: u64,
@@ -163,7 +172,7 @@ impl<M> BuddyAllocator<M> {
         })
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, _device)))]
     pub unsafe fn dealloc(
         &mut self,
         _device: &impl MemoryDevice<M>,

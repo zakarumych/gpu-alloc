@@ -1,7 +1,8 @@
 /// Configuration for [`GpuAllocator`]
 ///
 /// [`GpuAllocator`]: type.GpuAllocator
-#[cfg_attr(feature = "serde", serde::Serialize, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Config {
     /// Size in bytes of request that will be served by dedicated memory object.
     /// This value should be large enough to not exhaust memory object limit

@@ -16,6 +16,12 @@ use {
     },
 };
 
+#[cfg(feature = "tracing")]
+use core::fmt::Debug as MemoryBounds;
+
+#[cfg(not(feature = "tracing"))]
+use core::any::Any as MemoryBounds;
+
 #[derive(Debug)]
 pub struct GpuAllocator<M> {
     dedicated_treshold: u64,
@@ -35,8 +41,11 @@ pub struct GpuAllocator<M> {
     buddy_allocators: Box<[Option<BuddyAllocator<M>>]>,
 }
 
-impl<M> GpuAllocator<M> {
-    #[cfg_attr(feature = "tracing", tracing::instrument)]
+impl<M> GpuAllocator<M>
+where
+    M: MemoryBounds + 'static,
+{
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(props), fields(props = debug(props.by_ref()))))]
     pub fn new(
         config: Config,
         props: DeviceProperties<impl AsRef<[MemoryType]>, impl AsRef<[MemoryHeap]>>,
@@ -163,7 +172,7 @@ impl<M> GpuAllocator<M> {
 
                     #[cfg(feature = "tracing")]
                     tracing::debug!(
-                        "Allocating memory object `{}@{}`",
+                        "Allocating memory object `{}@{:?}`",
                         request.size,
                         memory_type
                     );

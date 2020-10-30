@@ -3,17 +3,20 @@ use {
     core::ptr::NonNull,
 };
 
+#[derive(Debug)]
 pub enum OutOfMemory {
     OutOfDeviceMemory,
     OutOfHostMemory,
 }
 
+#[derive(Debug)]
 pub enum DeviceMapError {
     OutOfDeviceMemory,
     OutOfHostMemory,
     MapFailed,
 }
 
+#[derive(Debug)]
 pub struct MappedMemoryRange<'a, M> {
     pub memory: &'a M,
     pub offset: u64,
@@ -21,6 +24,7 @@ pub struct MappedMemoryRange<'a, M> {
 }
 
 /// Properties of the device that will be used for allocating memory objects.
+#[derive(Debug)]
 pub struct DeviceProperties<T: AsRef<[MemoryType]>, H: AsRef<[MemoryHeap]>> {
     /// Array of memory types provided by the device.
     pub memory_types: T,
@@ -36,6 +40,22 @@ pub struct DeviceProperties<T: AsRef<[MemoryType]>, H: AsRef<[MemoryHeap]>> {
 
     /// Atom size for host mappable non-coherent memory.
     pub non_coherent_atom_size: u64,
+}
+
+impl<T, H> DeviceProperties<T, H>
+where
+    T: AsRef<[MemoryType]>,
+    H: AsRef<[MemoryHeap]>,
+{
+    pub fn by_ref(&self) -> DeviceProperties<&[MemoryType], &[MemoryHeap]> {
+        DeviceProperties {
+            memory_types: self.memory_types.as_ref(),
+            memory_heaps: self.memory_heaps.as_ref(),
+            max_memory_allocation_count: self.max_memory_allocation_count,
+            max_memory_allocation_size: self.max_memory_allocation_size,
+            non_coherent_atom_size: self.non_coherent_atom_size,
+        }
+    }
 }
 
 /// Abstract device that allocated memory to sub-allocate.

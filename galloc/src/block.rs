@@ -89,6 +89,8 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         size: usize,
     ) -> Result<NonNull<u8>, MapError> {
+        self.assert_unmapped();
+
         let ptr = self.map_memory_internal(device, offset, size)?;
         self.mapped = true;
         Ok(NonNull::new_unchecked(ptr))
@@ -106,6 +108,7 @@ impl<M> MemoryBlock<M> {
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
     pub unsafe fn unmap(&mut self, device: &impl MemoryDevice<M>) {
+        self.assert_mapped();
         self.unmap_memory_internal(device);
         self.mapped = false;
     }
@@ -128,6 +131,8 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         data: &[u8],
     ) -> Result<(), MapError> {
+        self.assert_unmapped();
+
         let size = data.len();
         let ptr = self.map_memory_internal(device, offset, size)?;
 
@@ -167,6 +172,8 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         data: &mut [u8],
     ) -> Result<(), MapError> {
+        self.assert_unmapped();
+
         #[cfg(feature = "tracing")]
         if !self.cached() {
             tracing::warn!("Reading from non-cached memory may be slow. Consider allocating HOST_CACHED memory block for host reads.")
@@ -200,8 +207,6 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         size: usize,
     ) -> Result<*mut u8, MapError> {
-        assert!(!self.mapped, "Memory block is already mapped");
-
         let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
         let size = align_up(size_u64, self.map_mask)
             .expect("aligned `size` doesn't fit device address space");
@@ -239,7 +244,6 @@ impl<M> MemoryBlock<M> {
     }
 
     unsafe fn unmap_memory_internal(&self, device: &impl MemoryDevice<M>) {
-        assert!(self.mapped);
         match self.flavor {
             MemoryBlockFlavor::Dedicated => {
                 device.unmap_memory(&self.memory);
@@ -247,6 +251,14 @@ impl<M> MemoryBlock<M> {
             MemoryBlockFlavor::Linear { .. } => {}
             MemoryBlockFlavor::Buddy { .. } => {}
         }
+    }
+
+    fn assert_mapped(&self) {
+        assert!(self.mapped, "Memory block is not mapped");
+    }
+
+    fn assert_unmapped(&self) {
+        assert!(!self.mapped, "Memory block is already mapped");
     }
 
     fn coherent(&self) -> bool {
