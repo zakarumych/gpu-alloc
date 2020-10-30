@@ -97,8 +97,8 @@ jobs:
     - name: Install cargo-readme
       uses: actions-rs/cargo@v1
       with:
-        command: cargo
-        args: install cargo-readme
+        command: install
+        args: cargo-readme
     - name: Check that readme is up-to-date
       run: |
         | cd galloc
