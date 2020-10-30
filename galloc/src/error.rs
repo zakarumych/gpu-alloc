@@ -1,6 +1,6 @@
 use {
     core::fmt::{self, Display},
-    galloc_types::{DeviceAllocationError, DeviceMapError},
+    galloc_types::{DeviceMapError, OutOfMemory},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -11,11 +11,11 @@ pub enum AllocationError {
     TooManyObjects,
 }
 
-impl From<DeviceAllocationError> for AllocationError {
-    fn from(err: DeviceAllocationError) -> Self {
+impl From<OutOfMemory> for AllocationError {
+    fn from(err: OutOfMemory) -> Self {
         match err {
-            DeviceAllocationError::OutOfDeviceMemory => AllocationError::OutOfDeviceMemory,
-            DeviceAllocationError::OutOfHostMemory => AllocationError::OutOfHostMemory,
+            OutOfMemory::OutOfDeviceMemory => AllocationError::OutOfDeviceMemory,
+            OutOfMemory::OutOfHostMemory => AllocationError::OutOfHostMemory,
         }
     }
 }
@@ -52,6 +52,15 @@ impl From<DeviceMapError> for MapError {
             DeviceMapError::OutOfDeviceMemory => MapError::OutOfDeviceMemory,
             DeviceMapError::OutOfHostMemory => MapError::OutOfHostMemory,
             DeviceMapError::MapFailed => MapError::MapFailed,
+        }
+    }
+}
+
+impl From<OutOfMemory> for MapError {
+    fn from(err: OutOfMemory) -> Self {
+        match err {
+            OutOfMemory::OutOfDeviceMemory => MapError::OutOfDeviceMemory,
+            OutOfMemory::OutOfHostMemory => MapError::OutOfHostMemory,
         }
     }
 }

@@ -3,7 +3,7 @@ use {
     core::ptr::NonNull,
 };
 
-pub enum DeviceAllocationError {
+pub enum OutOfMemory {
     OutOfDeviceMemory,
     OutOfHostMemory,
 }
@@ -21,12 +21,12 @@ pub struct MappedMemoryRange<'a, M> {
 }
 
 /// Properties of the device that will be used for allocating memory objects.
-pub struct DeviceProperties<'a> {
+pub struct DeviceProperties<T: AsRef<[MemoryType]>, H: AsRef<[MemoryHeap]>> {
     /// Array of memory types provided by the device.
-    pub memory_types: &'a [MemoryType],
+    pub memory_types: T,
 
     /// Array of memory heaps provided by the device.
-    pub memory_heaps: &'a [MemoryHeap],
+    pub memory_heaps: H,
 
     /// Maximum number of valid memory allocations that can exist simultaneously within the device.
     pub max_memory_allocation_count: u32,
@@ -49,11 +49,7 @@ pub trait MemoryDevice<M> {
     ///
     /// `memory_type` must be valid index for memory type associated with this device.
     /// Retreiving this information is implementation specific.
-    unsafe fn allocate_memory(
-        &self,
-        size: u64,
-        memory_type: u32,
-    ) -> Result<M, DeviceAllocationError>;
+    unsafe fn allocate_memory(&self, size: u64, memory_type: u32) -> Result<M, OutOfMemory>;
 
     /// Deallocate memory object.
     /// All clones of specified memory handle become invalid.
@@ -97,7 +93,10 @@ pub trait MemoryDevice<M> {
     ///   subregion of currently mapped memory region
     /// * if `memory` in some element of `ranges` does not contain `HOST_COHERENT` property
     ///   then `offset` and `size` of that element must be multiple of `non_coherent_atom_size`.
-    unsafe fn invalidate_memory_ranges(&self, ranges: &[MappedMemoryRange<'_, M>]);
+    unsafe fn invalidate_memory_ranges(
+        &self,
+        ranges: &[MappedMemoryRange<'_, M>],
+    ) -> Result<(), OutOfMemory>;
 
     /// Flushes ranges of memory mapped regions.
     ///
@@ -108,5 +107,8 @@ pub trait MemoryDevice<M> {
     ///   subregion of currently mapped memory region
     /// * if `memory` in some element of `ranges` does not contain `HOST_COHERENT` property
     ///   then `offset` and `size` of that element must be multiple of `non_coherent_atom_size`.
-    unsafe fn flush_memory_ranges(&self, ranges: &[MappedMemoryRange<'_, M>]);
+    unsafe fn flush_memory_ranges(
+        &self,
+        ranges: &[MappedMemoryRange<'_, M>],
+    ) -> Result<(), OutOfMemory>;
 }

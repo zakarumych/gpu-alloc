@@ -1,7 +1,7 @@
 use {
     galloc_types::{
-        DeviceAllocationError, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
-        MemoryHeap, MemoryPropertyFlags, MemoryType,
+        DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
+        MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
     slab::Slab,
     std::{
@@ -36,25 +36,29 @@ pub struct MockMemoryDevice {
 }
 
 impl MockMemoryDevice {
-    pub fn new(props: DeviceProperties<'_>) -> Self {
+    pub fn new(
+        props: DeviceProperties<impl AsRef<[MemoryType]>, impl AsRef<[MemoryHeap]>>,
+    ) -> Self {
         MockMemoryDevice {
-            memory_types: props.memory_types.iter().copied().collect(),
-            memory_heaps: props.memory_heaps.iter().copied().collect(),
+            memory_heaps_remaining_capacity: props
+                .memory_heaps
+                .as_ref()
+                .iter()
+                .map(|heap| Cell::new(heap.size))
+                .collect(),
+
+            memory_types: props.memory_types.as_ref().into(),
+            memory_heaps: props.memory_heaps.as_ref().into(),
             max_memory_allocation_count: props.max_memory_allocation_count,
             max_memory_allocation_size: props.max_memory_allocation_size,
             non_coherent_atom_size: props.non_coherent_atom_size,
 
             allocations_remains: Cell::new(props.max_memory_allocation_count),
-            memory_heaps_remaining_capacity: props
-                .memory_heaps
-                .iter()
-                .map(|heap| Cell::new(heap.size))
-                .collect(),
             allocations: RefCell::new(Slab::new()),
         }
     }
 
-    pub fn props(&self) -> DeviceProperties<'_> {
+    pub fn props(&self) -> DeviceProperties<&[MemoryType], &[MemoryHeap]> {
         DeviceProperties {
             memory_types: &self.memory_types,
             memory_heaps: &self.memory_heaps,
@@ -67,11 +71,7 @@ impl MockMemoryDevice {
 
 impl MemoryDevice<usize> for MockMemoryDevice {
     #[tracing::instrument(skip(self))]
-    unsafe fn allocate_memory(
-        &self,
-        size: u64,
-        memory_type: u32,
-    ) -> Result<usize, DeviceAllocationError> {
+    unsafe fn allocate_memory(&self, size: u64, memory_type: u32) -> Result<usize, OutOfMemory> {
         assert!(
             size <= self.max_memory_allocation_size,
             "Allocation size exceeds limit"
@@ -87,7 +87,7 @@ impl MemoryDevice<usize> for MockMemoryDevice {
         let heap = &self.memory_heaps_remaining_capacity
             [self.memory_types[memory_type as usize].heap as usize];
         if heap.get() < size {
-            return Err(DeviceAllocationError::OutOfDeviceMemory);
+            return Err(OutOfMemory::OutOfDeviceMemory);
         }
         heap.set(heap.get() - size);
 
@@ -161,7 +161,10 @@ impl MemoryDevice<usize> for MockMemoryDevice {
         assert!(memory.mapped.take().is_some(), "Was not mapped");
     }
 
-    unsafe fn invalidate_memory_ranges(&self, ranges: &[MappedMemoryRange<'_, usize>]) {
+    unsafe fn invalidate_memory_ranges(
+        &self,
+        ranges: &[MappedMemoryRange<'_, usize>],
+    ) -> Result<(), OutOfMemory> {
         for range in ranges {
             let mut allocations = self.allocations.borrow_mut();
             let memory = allocations
@@ -203,9 +206,14 @@ impl MemoryDevice<usize> for MockMemoryDevice {
                 "`size` must either be a multiple of `non_coherent_atom_size`, or `offset + size` must equal the size of memory"
             );
         }
+
+        Ok(())
     }
 
-    unsafe fn flush_memory_ranges(&self, ranges: &[MappedMemoryRange<'_, usize>]) {
+    unsafe fn flush_memory_ranges(
+        &self,
+        ranges: &[MappedMemoryRange<'_, usize>],
+    ) -> Result<(), OutOfMemory> {
         for range in ranges {
             let mut allocations = self.allocations.borrow_mut();
             let memory = allocations
@@ -247,5 +255,6 @@ impl MemoryDevice<usize> for MockMemoryDevice {
                 "`size` must either be a multiple of `non_coherent_atom_size`, or `offset + size` must equal the size of memory"
             );
         }
+        Ok(())
     }
 }

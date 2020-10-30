@@ -12,7 +12,7 @@ use {
     alloc::boxed::Box,
     core::convert::TryFrom as _,
     galloc_types::{
-        DeviceAllocationError, DeviceProperties, MemoryDevice, MemoryPropertyFlags, MemoryType,
+        DeviceProperties, MemoryDevice, MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
 };
 
@@ -37,7 +37,10 @@ pub struct GpuAllocator<M> {
 
 impl<M> GpuAllocator<M> {
     #[cfg_attr(feature = "tracing", tracing::instrument)]
-    pub fn new(config: Config, props: DeviceProperties) -> Self {
+    pub fn new(
+        config: Config,
+        props: DeviceProperties<impl AsRef<[MemoryType]>, impl AsRef<[MemoryHeap]>>,
+    ) -> Self {
         assert!(
             props.non_coherent_atom_size.is_power_of_two(),
             "`non_coherent_atom_size` must be power of two"
@@ -64,11 +67,12 @@ impl<M> GpuAllocator<M> {
 
             max_memory_allocation_size: props.max_memory_allocation_size,
 
-            memory_for_usage: MemoryForUsage::new(props.memory_types),
+            memory_for_usage: MemoryForUsage::new(props.memory_types.as_ref()),
 
-            memory_types: props.memory_types.iter().copied().collect(),
+            memory_types: props.memory_types.as_ref().iter().copied().collect(),
             memory_heaps: props
                 .memory_heaps
+                .as_ref()
                 .iter()
                 .map(|heap| Heap::new(heap.size))
                 .collect(),
@@ -80,8 +84,8 @@ impl<M> GpuAllocator<M> {
             minimal_buddy_size: config.minimal_buddy_size,
             initial_buddy_dedicated_size: config.initial_buddy_dedicated_size,
 
-            linear_allocators: props.memory_types.iter().map(|_| None).collect(),
-            buddy_allocators: props.memory_types.iter().map(|_| None).collect(),
+            linear_allocators: props.memory_types.as_ref().iter().map(|_| None).collect(),
+            buddy_allocators: props.memory_types.as_ref().iter().map(|_| None).collect(),
         }
     }
 
@@ -180,8 +184,10 @@ impl<M> GpuAllocator<M> {
                                 flavor: MemoryBlockFlavor::Dedicated,
                             });
                         }
-                        Err(DeviceAllocationError::OutOfDeviceMemory) => continue,
-                        Err(err) => return Err(err.into()),
+                        Err(OutOfMemory::OutOfDeviceMemory) => continue,
+                        Err(OutOfMemory::OutOfHostMemory) => {
+                            return Err(AllocationError::OutOfHostMemory)
+                        }
                     }
                 }
                 Strategy::Linear => {
