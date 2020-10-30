@@ -132,7 +132,7 @@ impl<M> MemoryBlock<M> {
         let ptr = self.map_memory_internal(device, offset, size)?;
 
         copy_nonoverlapping(data.as_ptr(), ptr, size);
-        if !self.coherent() {
+        let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.map_mask);
             let size = align_up(data.len() as u64, self.map_mask).unwrap();
 
@@ -140,9 +140,13 @@ impl<M> MemoryBlock<M> {
                 memory: &self.memory,
                 offset: aligned_offset,
                 size,
-            }]);
-        }
-        Ok(())
+            }])
+        } else {
+            Ok(())
+        };
+
+        self.unmap_memory_internal(device);
+        result.map_err(Into::into)
     }
 
     /// Transiently maps block memory range and copies specified data
@@ -163,9 +167,14 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         data: &mut [u8],
     ) -> Result<(), MapError> {
+        #[cfg(feature = "tracing")]
+        if !self.cached() {
+            tracing::warn!("Reading from non-cached memory may be slow. Consider allocating HOST_CACHED memory block for host reads.")
+        }
+
         let size = data.len();
         let ptr = self.map_memory_internal(device, offset, size)?;
-        if !self.coherent() {
+        let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.map_mask);
             let size = align_up(data.len() as u64, self.map_mask).unwrap();
 
@@ -173,14 +182,16 @@ impl<M> MemoryBlock<M> {
                 memory: &self.memory,
                 offset: aligned_offset,
                 size,
-            }]);
+            }])
+        } else {
+            Ok(())
+        };
+        if result.is_ok() {
+            copy_nonoverlapping(ptr, data.as_mut_ptr(), size);
         }
-        #[cfg(feature = "tracing")]
-        if !self.cached() {
-            tracing::warn!("Reading from non-cached memory may be slow. Consider allocating HOST_CACHED memory block for host reads.")
-        }
-        copy_nonoverlapping(ptr, data.as_mut_ptr(), size);
-        Ok(())
+
+        self.unmap_memory_internal(device);
+        result.map_err(Into::into)
     }
 
     unsafe fn map_memory_internal(
