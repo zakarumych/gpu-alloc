@@ -5,7 +5,7 @@ use {
     },
     gfx_hal::{
         adapter::{Adapter, PhysicalDevice as _},
-        device::{AllocationError, Device as _, MapError, OutOfMemory as GfxOutOfMemory},
+        device::{AllocationError, Device, MapError, OutOfMemory as GfxOutOfMemory},
         memory::{Properties, Segment},
         Backend, MemoryTypeId,
     },
@@ -13,24 +13,28 @@ use {
 };
 
 #[repr(transparent)]
-pub struct GfxDevice<B: Backend> {
+pub struct GfxMemoryDevice<B: Backend> {
     device: B::Device,
 }
 
-impl<B> GfxDevice<B>
+impl<B> GfxMemoryDevice<B>
 where
     B: Backend,
 {
-    pub fn new(device: &B::Device) -> &Self {
+    pub fn wrap<D>(device: &D) -> &Self
+    where
+        D: Device<B>,
+        B: Backend<Device = D>,
+    {
         unsafe {
             // Safe because `Self` is `repr(transparent)`
-            // with only field being `B::Device`.
-            &*(device as *const B::Device as *const Self)
+            // with only non-zero-sized field being `D`.
+            &*(device as *const D as *const Self)
         }
     }
 }
 
-impl<B> MemoryDevice<Arc<B::Memory>> for GfxDevice<B>
+impl<B> MemoryDevice<Arc<B::Memory>> for GfxMemoryDevice<B>
 where
     B: Backend,
 {
@@ -139,7 +143,7 @@ where
 }
 
 /// Returns `DeviceProperties` from gfx's `Adapter`, required to create `GpuAllocator`.
-pub fn device_properties<B>(
+pub fn gfx_device_properties<B>(
     adapter: &Adapter<B>,
 ) -> DeviceProperties<Box<[MemoryType]>, Box<[MemoryHeap]>>
 where
