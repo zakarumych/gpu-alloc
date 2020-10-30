@@ -233,14 +233,14 @@ where
                 Some(ready) if fits(self.chunk_size, ready.allocated, size, align_mask) => {
                     let chunks_offset = self.chunks_unmapped.offset;
                     let exhausted = self.chunks_unmapped.exhausted.len() as u64;
-                    return Ok(Self::alloc_from_chunk(
+                    Ok(Self::alloc_from_chunk(
                         ready,
                         self.chunk_size,
                         chunks_offset,
                         exhausted,
                         size,
                         align_mask,
-                    ));
+                    ))
                 }
                 ready => {
                     self.chunks_unmapped

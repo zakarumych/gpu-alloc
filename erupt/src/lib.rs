@@ -4,7 +4,7 @@ use {
         DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
         MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
-    std::{convert::TryFrom as _, ptr::NonNull},
+    std::ptr::NonNull,
     tinyvec::TinyVec,
 };
 
@@ -159,8 +159,7 @@ pub unsafe fn device_properties(
             .iter()
             .map(|memory_type| MemoryType {
                 props: memory_properties_from_erupt(memory_type.property_flags),
-                heap: u32::try_from(memory_type.heap_index)
-                    .expect("Memory heap index should fit `u32`"),
+                heap: memory_type.heap_index,
             })
             .collect(),
         memory_heaps: memory_properties.memory_heaps

@@ -118,12 +118,11 @@ fn compatible(usage: UsageFlags, flags: MemoryPropertyFlags) -> bool {
         || flags.contains(MemoryPropertyFlags::PROTECTED)
     {
         false
+    } else if usage.intersects(UsageFlags::HOST_ACCESS | UsageFlags::UPLOAD | UsageFlags::DOWNLOAD)
+    {
+        flags.contains(MemoryPropertyFlags::HOST_VISIBLE)
     } else {
-        if usage.intersects(UsageFlags::HOST_ACCESS | UsageFlags::UPLOAD | UsageFlags::DOWNLOAD) {
-            flags.contains(MemoryPropertyFlags::HOST_VISIBLE)
-        } else {
-            true
-        }
+        true
     }
 }
 
@@ -141,8 +140,5 @@ fn priority(usage: UsageFlags, flags: MemoryPropertyFlags) -> u32 {
     let coherent: bool = flags.contains(Flags::HOST_COHERENT)
         ^ (usage.intersects(UsageFlags::UPLOAD | UsageFlags::DOWNLOAD));
 
-    let priority =
-        device_local as u32 * 8 + host_visible as u32 * 4 + cached as u32 * 2 + coherent as u32;
-
-    priority
+    device_local as u32 * 8 + host_visible as u32 * 4 + cached as u32 * 2 + coherent as u32
 }

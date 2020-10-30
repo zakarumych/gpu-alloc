@@ -45,6 +45,9 @@ impl<M> GpuAllocator<M>
 where
     M: MemoryBounds + 'static,
 {
+    /// Creates  new instance of `GpuAllocator`.
+    /// Provided `DeviceProperties` should match propertices of `MemoryDevice` that will be used
+    /// with created `GpuAllocator` instance.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(props), fields(props = debug(props.by_ref()))))]
     pub fn new(
         config: Config,
@@ -98,6 +101,13 @@ where
         }
     }
 
+    /// Allocates memory block from specified `device` according to the `request`.
+    ///
+    /// # Safety
+    ///
+    /// * `device` must be one with `DeviceProperties` that were provided to create this `GpuAllocator` instance.
+    /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
+    ///   and memory blocks allocated from it.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
     pub unsafe fn alloc(
         &mut self,
@@ -297,6 +307,14 @@ where
         Err(AllocationError::OutOfDeviceMemory)
     }
 
+    /// Deallocates memory block previously allocated from this `GpuAllocator` instance.
+    ///
+    /// # Safety
+    ///
+    /// * Memory block must have been allocated by this `GpuAllocator` instance
+    /// * `device` must be one with `DeviceProperties` that were provided to create this `GpuAllocator` instance
+    /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
+    ///   and memory blocks allocated from it
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
     pub unsafe fn dealloc(&mut self, device: &impl MemoryDevice<M>, block: MemoryBlock<M>) {
         match block.flavor {
