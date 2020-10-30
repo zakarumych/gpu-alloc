@@ -1,0 +1,11 @@
+[package]
+name = "galloc-erupt"
+version = "0.1.0"
+authors = ["Zakarum <zakarumych@ya.ru>"]
+edition = "2018"
+
+[dependencies]
+galloc-types = { path = "../types", version = "0.1" }
+tracing = { version = "0.1", features = ["attributes"], optional = true }
+erupt = { version = "0.15", default-features = false, features = ["loading"] }
+tinyvec = { version = "1.0",  default-features = false, features = ["alloc"] }
