@@ -100,4 +100,4 @@ jobs:
         crate: cargo-readme
         use-tool-cache: true
     - name: Check that readme is up-to-date
-      run: 'cd galloc && [[ ! $(cargo readme | diff - ../README.md) ]]'
+      run: 'cd galloc && [[ ! $(cargo readme --template ../README.tpl | diff - ../README.md) ]]'
