@@ -1,6 +1,6 @@
 use {
     core::fmt::{self, Display},
-    galloc_types::{DeviceMapError, OutOfMemory},
+    gpu_alloc_types::{DeviceMapError, OutOfMemory},
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

@@ -1,4 +1,4 @@
-use galloc_types::{MemoryPropertyFlags, MemoryType};
+use gpu_alloc_types::{MemoryPropertyFlags, MemoryType};
 
 bitflags::bitflags! {
     /// Memory usage type.

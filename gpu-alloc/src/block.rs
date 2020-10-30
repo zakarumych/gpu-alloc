@@ -4,7 +4,7 @@ use {
         convert::TryFrom as _,
         ptr::{copy_nonoverlapping, NonNull},
     },
-    galloc_types::{MappedMemoryRange, MemoryDevice, MemoryPropertyFlags},
+    gpu_alloc_types::{MappedMemoryRange, MemoryDevice, MemoryPropertyFlags},
 };
 
 #[derive(Debug)]

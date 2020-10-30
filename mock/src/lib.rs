@@ -1,5 +1,5 @@
 use {
-    galloc_types::{
+    gpu_alloc_types::{
         DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
         MemoryPropertyFlags, MemoryType, OutOfMemory,
     },

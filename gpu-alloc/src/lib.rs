@@ -6,18 +6,18 @@
 
 extern crate alloc;
 
+mod allocator;
 mod block;
 mod buddy;
 mod config;
 mod error;
-mod galloc;
 mod heap;
 mod linear;
 mod usage;
 
 pub use {
-    self::{config::*, error::*, galloc::*, usage::*},
-    galloc_types::*,
+    self::{allocator::*, config::*, error::*, usage::*},
+    gpu_alloc_types::*,
 };
 
 /// Possible requirements for dedicated memory object allocation.

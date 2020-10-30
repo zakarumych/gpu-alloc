@@ -1,9 +1,9 @@
 use {
-    galloc::{
+    gpu_alloc::{
         Config, Dedicated, DeviceProperties, GpuAllocator, MemoryHeap, MemoryPropertyFlags,
         MemoryType, Request, UsageFlags,
     },
-    galloc_mock::MockMemoryDevice,
+    gpu_alloc_mock::MockMemoryDevice,
 };
 
 fn main() -> eyre::Result<()> {

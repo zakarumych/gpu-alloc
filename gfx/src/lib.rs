@@ -1,13 +1,13 @@
 use {
-    galloc_types::{
-        DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
-        MemoryPropertyFlags, MemoryType, OutOfMemory,
-    },
     gfx_hal::{
         adapter::{Adapter, PhysicalDevice as _},
         device::{AllocationError, Device, MapError, OutOfMemory as GfxOutOfMemory},
         memory::{Properties, Segment},
         Backend, MemoryTypeId,
+    },
+    gpu_alloc_types::{
+        DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
+        MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
     std::{convert::TryFrom as _, ptr::NonNull, sync::Arc},
 };

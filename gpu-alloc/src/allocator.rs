@@ -11,7 +11,7 @@ use {
     },
     alloc::boxed::Box,
     core::convert::TryFrom as _,
-    galloc_types::{
+    gpu_alloc_types::{
         DeviceProperties, MemoryDevice, MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
 };

@@ -1,20 +1,20 @@
 use {
     eyre::eyre,
-    galloc::{Config, Dedicated, GpuAllocator, Request, UsageFlags},
-    galloc_gfx::{gfx_device_properties, GfxMemoryDevice},
     gfx_backend_vulkan::Instance,
     gfx_hal::{
         adapter::{Gpu, PhysicalDevice as _},
         queue::QueueFamily as _,
         Features, Instance as _,
     },
+    gpu_alloc::{Config, Dedicated, GpuAllocator, Request, UsageFlags},
+    gpu_alloc_gfx::{gfx_device_properties, GfxMemoryDevice},
 };
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
 
     let instance =
-        Instance::create("galloc-example", 1).map_err(|_| eyre!("Unsupported backend"))?;
+        Instance::create("gpu_alloc-example", 1).map_err(|_| eyre!("Unsupported backend"))?;
 
     let adapters = instance.enumerate_adapters();
 

@@ -1,6 +1,6 @@
 use {
     erupt::{vk1_0, DeviceLoader, InstanceLoader},
-    galloc_types::{
+    gpu_alloc_types::{
         DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
         MemoryPropertyFlags, MemoryType, OutOfMemory,
     },

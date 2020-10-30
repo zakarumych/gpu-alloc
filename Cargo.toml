@@ -1,2 +1,2 @@
 [workspace]
-members = ["types", "galloc", "mock", "gfx", "erupt", "examples"]
+members = ["types", "gpu-alloc", "mock", "gfx", "erupt", "examples"]

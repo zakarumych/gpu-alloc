@@ -2,7 +2,7 @@ use {
     crate::{align_up, error::AllocationError, heap::Heap},
     alloc::vec::Vec,
     core::{convert::TryFrom as _, ptr::NonNull},
-    galloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
+    gpu_alloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
 #[cfg(feature = "tracing")]
