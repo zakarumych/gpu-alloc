@@ -24,22 +24,22 @@ fn main() -> eyre::Result<()> {
 
     let mut allocator = GpuAllocator::new(config, device.props());
 
-    // dbg!(&allocator);
-
     let block = unsafe {
         allocator.alloc(
             &device,
             Request {
                 size: 10,
                 align_mask: 1,
-                usage: UsageFlags::empty(),
-                memory_types: 1,
+                usage: UsageFlags::HOST_ACCESS,
+                memory_types: !0,
                 dedicated: Dedicated::Indifferent,
             },
         )
     }?;
 
     unsafe { block.write_bytes(&device, 0, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) }?;
+
+    unsafe { allocator.dealloc(&device, block) }
 
     Ok(())
 }

@@ -1,0 +1,32 @@
+[package]
+name = "galloc-basic-example"
+version = "0.1.0"
+authors = ["Zakarum <zakarumych@ya.ru>"]
+edition = "2018"
+publish = false
+
+[dependencies]
+galloc = { path = "../galloc", version = "=0.1" }
+eyre = "0.6"
+color-eyre = "0.5"
+galloc-mock = { path = "../mock", version = "=0.1", optional = true }
+galloc-gfx = { path = "../gfx", version = "=0.1", optional = true }
+gfx-hal = { version = "0.6", optional = true }
+gfx-backend-vulkan = { version = "0.6", optional = true }
+galloc-erupt = { path = "../erupt", version = "=0.1", optional = true }
+erupt = { version = "0.15", optional = true }
+
+[[bin]]
+name = "mock"
+path = "src/mock.rs"
+required-features = ["galloc-mock"]
+
+[[bin]]
+name = "gfx"
+path = "src/gfx.rs"
+required-features = ["galloc-gfx", "gfx-hal", "gfx-backend-vulkan"]
+
+# [[bin]]
+# name = "erupt"
+# path = "src/erupt.rs"
+# required-features = ["galloc-erupt", "erupt"]
