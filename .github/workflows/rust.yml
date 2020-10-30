@@ -95,11 +95,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install cargo-readme
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/install@v1
       with:
-        command: install
-        args: cargo-readme
+        crate: cargo-readme
+        use-tool-cache: true
     - name: Check that readme is up-to-date
-      run: |
-        | cd galloc
-        | [[ ! $(cargo readme | diff - ../README.md) ]]
+      run: 'cd galloc && [[ ! $(cargo readme | diff - ../README.md) ]]'
