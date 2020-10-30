@@ -24,11 +24,18 @@ jobs:
         profile: minimal
         toolchain: ${{ matrix.rust-toolchain }}
         override: true
-    - name: Run cargo test
+    - if: ${{ matrix.os != 'macOS-latest' }}
+      name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
         command: test
         args: --all --all-features
+    - if: ${{ matrix.os == 'macOS-latest' }}
+      name: Run cargo test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all --exclude galloc-erupt
 
   check-targets:
     runs-on: ubuntu-latest
@@ -88,7 +95,11 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install cargo-readme
-      command: cargo
-      args: install cargo-readme
+      uses: actions-rs/cargo@v1
+      with:
+        command: cargo
+        args: install cargo-readme
     - name: Check that readme is up-to-date
-      run: [[ ! $(cargo readme | diff - README.md) ]]
+      run: |
+        | cd galloc
+        | [[ ! $(cargo readme | diff - ../README.md) ]]
