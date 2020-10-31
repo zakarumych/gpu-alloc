@@ -62,7 +62,7 @@ impl Config {
             dedicated_treshold: 32 * 1024,
             preferred_dedicated_treshold: 1024,
             transient_dedicated_treshold: 128 * 1024,
-            linear_chunk: 128 * 1024 * 1024,
+            linear_chunk: 128 * 1024,
             minimal_buddy_size: 1,
             initial_buddy_dedicated_size: 8 * 1024,
         }
