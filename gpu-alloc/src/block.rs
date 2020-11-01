@@ -176,8 +176,10 @@ impl<M> MemoryBlock<M> {
         self.assert_unmapped();
 
         #[cfg(feature = "tracing")]
-        if !self.cached() {
-            tracing::warn!("Reading from non-cached memory may be slow. Consider allocating HOST_CACHED memory block for host reads.")
+        {
+            if !self.cached() {
+                tracing::warn!("Reading from non-cached memory may be slow. Consider allocating HOST_CACHED memory block for host reads.")
+            }
         }
 
         let size = data.len();

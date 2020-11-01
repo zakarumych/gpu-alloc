@@ -14,7 +14,7 @@ pub(crate) struct Slab<T> {
 }
 
 impl<T> Slab<T> {
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
         Slab {
             next_vacant: !0,
             entries: Vec::new(),
@@ -28,8 +28,8 @@ impl<T> Slab<T> {
             self.entries.push(Entry::Occupied(value));
             self.entries.len() - 1
         } else {
-            match unsafe { self.entries.get_unchecked(self.next_vacant) } {
-                &Entry::Vacant(next_vacant) => {
+            match *unsafe { self.entries.get_unchecked(self.next_vacant) } {
+                Entry::Vacant(next_vacant) => {
                     unsafe {
                         *self.entries.get_unchecked_mut(self.next_vacant) = Entry::Occupied(value);
                     }

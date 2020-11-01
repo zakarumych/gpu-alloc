@@ -46,7 +46,6 @@ struct MemoryForOneUsage {
     types_count: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
 pub(crate) struct MemoryForUsage {
     usages: [MemoryForOneUsage; 64],
 }

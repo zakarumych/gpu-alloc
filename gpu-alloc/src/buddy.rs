@@ -87,7 +87,7 @@ enum Release {
 }
 
 impl Size {
-    const fn new() -> Self {
+    fn new() -> Self {
         Size {
             pairs: Slab::new(),
             ready: 0,

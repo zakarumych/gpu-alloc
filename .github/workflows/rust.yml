@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        rust-toolchain: [stable, nightly]
+        rust-toolchain: [stable, nightly, '1.40.0', '1.46.0']
     steps:
     - uses: actions/checkout@v2
     - name: Install ${{ matrix.rust-toolchain }} toolchain
@@ -24,13 +24,13 @@ jobs:
         profile: minimal
         toolchain: ${{ matrix.rust-toolchain }}
         override: true
-    - if: ${{ matrix.os != 'macOS-latest' }}
+    - if: ${{ matrix.os != 'macOS-latest' && matrix.rust-toolchain != '1.40.0' }}
       name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
         command: test
         args: --all --all-features
-    - if: ${{ matrix.os == 'macOS-latest' }}
+    - if: ${{ matrix.os == 'macOS-latest' || matrix.rust-toolchain == '1.40.0' }}
       name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
@@ -41,7 +41,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust-toolchain: [stable, nightly]
         target:
         - i686-pc-windows-gnu
         - i686-pc-windows-msvc
@@ -54,11 +53,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Install ${{ matrix.rust-toolchain }} toolchain
+    - name: Install stable toolchain
       uses: actions-rs/toolchain@v1
       with:
         profile: minimal
-        toolchain: ${{ matrix.rust-toolchain }}
+        toolchain: stable
         target: ${{ matrix.target }}
         override: true
     - name: Run cargo check
