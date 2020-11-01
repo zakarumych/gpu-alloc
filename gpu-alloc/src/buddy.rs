@@ -1,7 +1,7 @@
 use {
-    crate::{align_up, error::AllocationError, heap::Heap},
+    crate::{align_up, error::AllocationError, heap::Heap, slab::Slab},
     alloc::vec::Vec,
-    core::{convert::TryFrom as _, ptr::NonNull},
+    core::{convert::TryFrom as _, hint::unreachable_unchecked, mem::replace, ptr::NonNull},
     gpu_alloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
@@ -15,27 +15,258 @@ use core::any::Any as MemoryBounds;
 pub(crate) struct BuddyBlock<M> {
     pub memory: M,
     pub ptr: Option<NonNull<u8>>,
-    pub offset: u64,
     pub size: u64,
     pub chunk: usize,
+    pub offset: u64,
+    pub index: usize,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Copy)]
+enum PairState {
+    Exhausted,
+    Ready {
+        ready: Side,
+        next: usize,
+        prev: usize,
+    },
+}
+
+impl PairState {
+    unsafe fn replace_next(&mut self, value: usize) -> usize {
+        match self {
+            PairState::Exhausted => unreachable_unchecked(),
+            PairState::Ready { next, .. } => replace(next, value),
+        }
+    }
+
+    unsafe fn replace_prev(&mut self, value: usize) -> usize {
+        match self {
+            PairState::Exhausted => unreachable_unchecked(),
+            PairState::Ready { prev, .. } => replace(prev, value),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Side {
+    Left,
+    Right,
+}
+use Side::*;
+impl Side {
+    fn bit(&self) -> u8 {
+        match self {
+            Left => 0,
+            Right => 1,
+        }
+    }
+}
+
+struct PairEntry {
+    state: PairState,
+    chunk: usize,
+    offset: u64,
+    parent: Option<usize>,
+}
+
+struct SizeBlockEntry {
+    chunk: usize,
+    offset: u64,
+    index: usize,
+}
+
 struct Size {
-    freelist: Vec<(usize, u64)>,
+    ready: usize,
+    pairs: Slab<PairEntry>,
 }
 
-#[derive(Debug)]
+enum Release {
+    None,
+    Parent(usize),
+    Chunk(usize),
+}
+
+impl Size {
+    const fn new() -> Self {
+        Size {
+            pairs: Slab::new(),
+            ready: 0,
+        }
+    }
+
+    fn add_pair_and_acquire_left(
+        &mut self,
+        chunk: usize,
+        offset: u64,
+        parent: Option<usize>,
+    ) -> SizeBlockEntry {
+        let index = self.pairs.insert(PairEntry {
+            state: PairState::Exhausted,
+            chunk,
+            offset,
+            parent,
+        });
+
+        // if self.ready >= self.pairs.len() {
+        self.ready = index;
+        let entry = unsafe { self.pairs.get_unchecked_mut(index) };
+        entry.state = PairState::Ready {
+            next: index,
+            prev: index,
+            ready: Right, // Left is allocated.
+        };
+        // } else {
+        //     unsafe { unreachable_unchecked() }
+
+        // let next = self.ready;
+        // let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
+        // let prev = unsafe { next_entry.state.replace_prev(index) };
+
+        // let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
+        // let prev_next = unsafe { prev_entry.state.replace_next(index) };
+        // debug_assert_eq!(prev_next, next);
+
+        // let entry = unsafe { self.pairs.get_unchecked_mut(index) };
+        // entry.state = PairState::Ready {
+        //     next,
+        //     prev,
+        //     ready: Right, // Left is allocated.
+        // }
+        // }
+
+        SizeBlockEntry {
+            chunk,
+            offset,
+            index,
+        }
+    }
+
+    fn acquire(&mut self, size: u64) -> Option<SizeBlockEntry> {
+        if self.ready >= self.pairs.len() {
+            return None;
+        }
+
+        let entry = unsafe { self.pairs.get_unchecked_mut(self.ready) };
+        let chunk = entry.chunk;
+        let offset = entry.offset;
+
+        let bit = match entry.state {
+            PairState::Exhausted => unsafe { unreachable_unchecked() },
+            PairState::Ready { ready, next, prev } => {
+                entry.state = PairState::Exhausted;
+
+                let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
+                let prev_next = unsafe { prev_entry.state.replace_next(next) };
+                debug_assert_eq!(prev_next, self.ready);
+
+                let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
+                let next_prev = unsafe { next_entry.state.replace_prev(prev) };
+                debug_assert_eq!(next_prev, self.ready);
+                ready.bit()
+            }
+        };
+
+        Some(SizeBlockEntry {
+            chunk,
+            offset: offset + bit as u64 * size,
+            index: (self.ready << 1) | bit as usize,
+        })
+    }
+
+    fn release(&mut self, index: usize) -> Release {
+        let side = match index & 1 {
+            0 => Left,
+            1 => Right,
+            _ => unsafe { unreachable_unchecked() },
+        };
+        let index = index >> 1;
+
+        let len = self.pairs.len();
+        let entry = self.pairs.get_mut(index);
+
+        let chunk = entry.chunk;
+        let offset = entry.offset;
+        let parent = entry.parent;
+
+        match (entry.state, side) {
+            (PairState::Exhausted, side) => {
+                if self.ready == len {
+                    entry.state = PairState::Ready {
+                        ready: side,
+                        next: index,
+                        prev: index,
+                    };
+                    self.ready = index;
+                } else {
+                    debug_assert!(self.ready < len);
+
+                    let next = self.ready;
+                    let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
+                    let prev = unsafe { next_entry.state.replace_prev(index) };
+
+                    let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
+                    let prev_next = unsafe { prev_entry.state.replace_next(index) };
+                    debug_assert_eq!(prev_next, next);
+
+                    let entry = unsafe { self.pairs.get_unchecked_mut(index) };
+                    entry.state = PairState::Ready {
+                        ready: side,
+                        next,
+                        prev,
+                    };
+                }
+                Release::None
+            }
+            (PairState::Ready { ready: Left, .. }, Left)
+            | (PairState::Ready { ready: Right, .. }, Right) => {
+                panic!("Attempt to dealloate already free block")
+            }
+
+            (
+                PairState::Ready {
+                    ready: Left,
+                    next,
+                    prev,
+                },
+                Side::Right,
+            )
+            | (
+                PairState::Ready {
+                    ready: Right,
+                    next,
+                    prev,
+                },
+                Side::Left,
+            ) => {
+                let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
+                let prev_next = unsafe { prev_entry.state.replace_next(next) };
+                debug_assert_eq!(prev_next, index);
+
+                let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
+                let next_prev = unsafe { next_entry.state.replace_prev(prev) };
+                debug_assert_eq!(next_prev, index);
+
+                match parent {
+                    Some(parent) => Release::Parent(parent),
+                    None => {
+                        debug_assert_eq!(offset, 0);
+                        Release::Chunk(chunk)
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct Chunk<M> {
     memory: M,
     ptr: Option<NonNull<u8>>,
-    _size: u64,
+    size: u64,
 }
 
-#[derive(Debug)]
 pub(crate) struct BuddyAllocator<M> {
     minimal_size: u64,
-    chunks: Vec<Chunk<M>>,
+    chunks: Slab<Chunk<M>>,
     sizes: Vec<Size>,
     memory_type: u32,
     props: MemoryPropertyFlags,
@@ -68,12 +299,8 @@ where
 
         BuddyAllocator {
             minimal_size,
-            chunks: Vec::new(),
-            sizes: (0..initial_sizes)
-                .map(|_| Size {
-                    freelist: Vec::new(),
-                })
-                .collect(),
+            chunks: Slab::new(),
+            sizes: (0..initial_sizes).map(|_| Size::new()).collect(),
             memory_type,
             props,
             atom_mask: atom_mask | (minimal_size - 1),
@@ -103,30 +330,34 @@ where
             usize::try_from(size_index).map_err(|_| AllocationError::OutOfDeviceMemory)?;
 
         if self.sizes.len() <= size_index {
-            self.sizes.push(Size {
-                freelist: Vec::new(),
-            });
+            self.sizes.push(Size::new());
         }
 
-        let mut candidate_size_index = size_index;
-        let (free_chunk, free_offset, free_size) = loop {
-            let candidate_size = &mut self.sizes[candidate_size_index];
+        let host_visible = self.host_visible();
 
-            if let Some((free_chunk, free_offset)) = candidate_size.freelist.pop() {
-                break (free_chunk, free_offset, candidate_size_index);
+        let mut candidate_size_index = size_index;
+        let (mut entry, entry_size_index) = loop {
+            let sizes_len = self.sizes.len();
+
+            let candidate_size_entry = &mut self.sizes[candidate_size_index];
+            let candidate_size = self.minimal_size << candidate_size_index;
+
+            if let Some(entry) = candidate_size_entry.acquire(candidate_size) {
+                break (entry, candidate_size_index);
             }
 
-            if self.sizes.len() == candidate_size_index + 1 {
+            if sizes_len == candidate_size_index + 1 {
+                // That's size of device allocation.
                 if *allocations_remains == 0 {
                     return Err(AllocationError::TooManyObjects);
                 }
 
-                let chunk_size = self.minimal_size << candidate_size_index;
+                let chunk_size = self.minimal_size << (candidate_size_index + 1);
                 let memory = device.allocate_memory(chunk_size, self.memory_type)?;
                 *allocations_remains -= 1;
                 heap.alloc(chunk_size);
 
-                let ptr = if self.host_visible() {
+                let ptr = if host_visible {
                     match device.map_memory(&memory, 0, chunk_size) {
                         Ok(ptr) => Some(ptr),
                         Err(DeviceMapError::OutOfDeviceMemory) => {
@@ -140,52 +371,75 @@ where
                     None
                 };
 
-                self.chunks.push(Chunk {
+                let chunk = self.chunks.insert(Chunk {
                     memory,
                     ptr,
-                    _size: chunk_size,
+                    size: chunk_size,
                 });
 
-                break (self.chunks.len() - 1, 0, candidate_size_index);
+                let entry = candidate_size_entry.add_pair_and_acquire_left(chunk, 0, None);
+
+                break (entry, candidate_size_index);
             }
 
             candidate_size_index += 1;
         };
 
-        for back_size_index in (size_index + 1..free_size).rev() {
-            let size = self.minimal_size << back_size_index;
-            self.sizes[back_size_index]
-                .freelist
-                .push((free_chunk, free_offset + size));
+        for size_index in (size_index..entry_size_index).rev() {
+            let size_entry = &mut self.sizes[size_index];
+            entry =
+                size_entry.add_pair_and_acquire_left(entry.chunk, entry.offset, Some(entry.index));
         }
 
-        let free_chunk_entry = &self.chunks[free_chunk];
+        let chunk_entry = self.chunks.get_unchecked(entry.chunk);
 
         Ok(BuddyBlock {
-            memory: free_chunk_entry.memory.clone(),
-            ptr: free_chunk_entry
+            memory: chunk_entry.memory.clone(),
+            ptr: chunk_entry
                 .ptr
-                .map(|ptr| NonNull::new_unchecked(ptr.as_ptr().add(free_offset as usize))),
-            offset: free_offset,
+                .map(|ptr| NonNull::new_unchecked(ptr.as_ptr().add(entry.offset as usize))),
             size,
-            chunk: free_chunk,
+            offset: entry.offset,
+            chunk: entry.chunk,
+            index: entry.index,
         })
     }
 
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, _device)))]
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
     pub unsafe fn dealloc(
         &mut self,
-        _device: &impl MemoryDevice<M>,
+        device: &impl MemoryDevice<M>,
         block: BuddyBlock<M>,
-        _heap: &mut Heap,
-        _allocations_remains: &mut u32,
+        heap: &mut Heap,
+        allocations_remains: &mut u32,
     ) {
+        debug_assert!(block.size.is_power_of_two());
+
         let size_index =
             (block.size.trailing_zeros() - self.minimal_size.trailing_zeros()) as usize;
 
-        self.sizes[size_index]
-            .freelist
-            .push((block.chunk, block.offset));
+        let mut release_index = block.index;
+        let mut release_size_index = size_index;
+
+        loop {
+            match self.sizes[release_size_index].release(release_index) {
+                Release::Parent(parent) => {
+                    release_size_index += 1;
+                    release_index = parent;
+                }
+                Release::Chunk(chunk) => {
+                    debug_assert_eq!(chunk, block.chunk);
+                    let chunk = self.chunks.remove(chunk);
+                    debug_assert_eq!(chunk.size, self.minimal_size << (release_size_index + 1));
+                    device.deallocate_memory(chunk.memory);
+                    *allocations_remains += 1;
+                    heap.dealloc(chunk.size);
+
+                    return;
+                }
+                Release::None => return,
+            }
+        }
     }
 
     fn host_visible(&self) -> bool {

@@ -13,6 +13,7 @@ mod config;
 mod error;
 mod heap;
 mod linear;
+mod slab;
 mod usage;
 
 pub use {

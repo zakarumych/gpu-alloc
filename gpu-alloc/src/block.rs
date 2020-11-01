@@ -28,6 +28,7 @@ pub(crate) enum MemoryBlockFlavor {
     },
     Buddy {
         chunk: usize,
+        index: usize,
         ptr: Option<NonNull<u8>>,
     },
 }

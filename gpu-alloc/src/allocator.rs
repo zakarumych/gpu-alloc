@@ -22,7 +22,6 @@ use core::fmt::Debug as MemoryBounds;
 #[cfg(not(feature = "tracing"))]
 use core::any::Any as MemoryBounds;
 
-#[derive(Debug)]
 pub struct GpuAllocator<M> {
     dedicated_treshold: u64,
     preferred_dedicated_treshold: u64,
@@ -294,6 +293,7 @@ where
                                 flavor: MemoryBlockFlavor::Buddy {
                                     chunk: block.chunk,
                                     ptr: block.ptr,
+                                    index: block.index,
                                 },
                             })
                         }
@@ -346,7 +346,7 @@ where
                     &mut self.allocations_remains,
                 );
             }
-            MemoryBlockFlavor::Buddy { chunk, ptr } => {
+            MemoryBlockFlavor::Buddy { chunk, ptr, index } => {
                 let memory_type = block.memory_type;
                 let heap = self.memory_types[memory_type as usize].heap;
                 let heap = &mut self.memory_heaps[heap as usize];
@@ -361,6 +361,7 @@ where
                         memory: block.memory,
                         offset: block.offset,
                         size: block.size,
+                        index,
                         ptr,
                         chunk,
                     },
@@ -379,8 +380,8 @@ enum Strategy {
 }
 
 fn host_visible_non_coherent(props: MemoryPropertyFlags) -> bool {
-    (props ^ MemoryPropertyFlags::HOST_COHERENT)
-        .contains(MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT)
+    (props & (MemoryPropertyFlags::HOST_COHERENT | MemoryPropertyFlags::HOST_VISIBLE))
+        == MemoryPropertyFlags::HOST_VISIBLE
 }
 
 fn with_implicit_usage_flags(usage: UsageFlags) -> UsageFlags {
