@@ -12,7 +12,7 @@ use {
     alloc::boxed::Box,
     core::convert::TryFrom as _,
     gpu_alloc_types::{
-        DeviceProperties, MemoryDevice, MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
+        DeviceProperties, MemoryDevice, MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
 };
 
@@ -47,11 +47,8 @@ where
     /// Creates  new instance of `GpuAllocator`.
     /// Provided `DeviceProperties` should match propertices of `MemoryDevice` that will be used
     /// with created `GpuAllocator` instance.
-    #[cfg_attr(feature = "tracing", tracing::instrument(skip(props), fields(props = debug(props.by_ref()))))]
-    pub fn new(
-        config: Config,
-        props: DeviceProperties<impl AsRef<[MemoryType]>, impl AsRef<[MemoryHeap]>>,
-    ) -> Self {
+    #[cfg_attr(feature = "tracing", tracing::instrument)]
+    pub fn new(config: Config, props: DeviceProperties<'_>) -> Self {
         assert!(
             props.non_coherent_atom_size.is_power_of_two(),
             "`non_coherent_atom_size` must be power of two"

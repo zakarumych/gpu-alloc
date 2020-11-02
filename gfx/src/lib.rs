@@ -143,9 +143,7 @@ where
 }
 
 /// Returns `DeviceProperties` from gfx's `Adapter`, required to create `GpuAllocator`.
-pub fn gfx_device_properties<B>(
-    adapter: &Adapter<B>,
-) -> DeviceProperties<Box<[MemoryType]>, Box<[MemoryHeap]>>
+pub fn gfx_device_properties<B>(adapter: &Adapter<B>) -> DeviceProperties<'static>
 where
     B: Backend,
 {
