@@ -4,17 +4,18 @@ use {
         MemoryType, Request, UsageFlags,
     },
     gpu_alloc_mock::MockMemoryDevice,
+    std::borrow::Cow,
 };
 
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
 
     let device = MockMemoryDevice::new(DeviceProperties {
-        memory_types: &[MemoryType {
+        memory_types: Cow::Borrowed(&[MemoryType {
             heap: 0,
             props: MemoryPropertyFlags::HOST_VISIBLE,
-        }],
-        memory_heaps: &[MemoryHeap { size: 1024 * 1024 }],
+        }]),
+        memory_heaps: Cow::Borrowed(&[MemoryHeap { size: 1024 * 1024 }]),
         max_memory_allocation_count: 32,
         max_memory_allocation_size: 1024 * 1024,
         non_coherent_atom_size: 8,

@@ -5,6 +5,7 @@ use {
     },
     slab::Slab,
     std::{
+        borrow::Cow,
         cell::{Cell, RefCell, UnsafeCell},
         convert::TryFrom as _,
         mem::transmute,
@@ -36,9 +37,7 @@ pub struct MockMemoryDevice {
 }
 
 impl MockMemoryDevice {
-    pub fn new(
-        props: DeviceProperties<impl AsRef<[MemoryType]>, impl AsRef<[MemoryHeap]>>,
-    ) -> Self {
+    pub fn new(props: DeviceProperties<'_>) -> Self {
         MockMemoryDevice {
             memory_heaps_remaining_capacity: props
                 .memory_heaps
@@ -47,8 +46,8 @@ impl MockMemoryDevice {
                 .map(|heap| Cell::new(heap.size))
                 .collect(),
 
-            memory_types: props.memory_types.as_ref().into(),
-            memory_heaps: props.memory_heaps.as_ref().into(),
+            memory_types: props.memory_types.into_owned().into_boxed_slice(),
+            memory_heaps: props.memory_heaps.into_owned().into_boxed_slice(),
             max_memory_allocation_count: props.max_memory_allocation_count,
             max_memory_allocation_size: props.max_memory_allocation_size,
             non_coherent_atom_size: props.non_coherent_atom_size,
@@ -58,10 +57,10 @@ impl MockMemoryDevice {
         }
     }
 
-    pub fn props(&self) -> DeviceProperties<&[MemoryType], &[MemoryHeap]> {
+    pub fn props(&self) -> DeviceProperties<'_> {
         DeviceProperties {
-            memory_types: &self.memory_types,
-            memory_heaps: &self.memory_heaps,
+            memory_types: Cow::Borrowed(&self.memory_types),
+            memory_heaps: Cow::Borrowed(&self.memory_heaps),
             max_memory_allocation_count: self.max_memory_allocation_count,
             max_memory_allocation_size: self.max_memory_allocation_size,
             non_coherent_atom_size: self.non_coherent_atom_size,

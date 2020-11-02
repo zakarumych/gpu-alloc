@@ -145,7 +145,7 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
 pub unsafe fn device_properties(
     instance: &InstanceLoader,
     physical_device: vk1_0::PhysicalDevice,
-) -> DeviceProperties<Box<[MemoryType]>, Box<[MemoryHeap]>> {
+) -> DeviceProperties<'static> {
     let limits = instance
         .get_physical_device_properties(physical_device, None)
         .limits;
