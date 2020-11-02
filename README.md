@@ -12,10 +12,10 @@ Implementation agnostic memory allocator for Vulkan like APIs.
 
 Supported Rust Versions
 
-gpu-alloc is built against the latest stable release. The minimum supported version is 1.40.
+The minimum supported version is 1.40.
 The current version is not guaranteed to build on Rust versions earlier than the minimum supported version.
 
-`gpu-alloc-erupt` requires version 1.46 or higher due to its dependency on `erupt` crate.
+`gpu-alloc-erupt` crate requires version 1.46 or higher due to dependency on `erupt` crate.
 
 ## License
 
