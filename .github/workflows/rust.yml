@@ -100,3 +100,11 @@ jobs:
         use-tool-cache: true
     - name: Check that readme is up-to-date
       run: 'cd gpu-alloc && [[ ! $(cargo readme --template ../README.tpl | diff - ../README.md) ]]'
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Security audit
+      uses: actions-rs/audit-check@v1
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
