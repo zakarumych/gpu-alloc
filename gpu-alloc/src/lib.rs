@@ -36,7 +36,7 @@ mod slab;
 mod usage;
 
 pub use {
-    self::{allocator::*, config::*, error::*, usage::*},
+    self::{allocator::*, block::MemoryBlock, config::*, error::*, usage::*},
     gpu_alloc_types::*,
 };
 
