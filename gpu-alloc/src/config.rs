@@ -36,10 +36,12 @@ pub struct Config {
 
 impl Config {
     /// Returns default configuration.
+    ///
     /// This is not `Default` implementation to discourage usage outside of
     /// prototyping.
-    /// Proper configuration should depend on hardware and intended usage.
-    /// But those values can be used as starting point.
+    ///
+    /// Proper configuration should depend on hardware and intended usage.\
+    /// But those values can be used as starting point.\
     /// Note that they can simply not work for some platforms with lesser
     /// memory capacity than today's "modern" GPU (year 2020).
     pub fn i_am_prototyping() -> Self {
@@ -56,7 +58,7 @@ impl Config {
         }
     }
 
-    /// Returns default configuration for potato.
+    /// Returns default configuration for average sized potato.
     pub fn i_am_potato() -> Self {
         Config {
             dedicated_treshold: 32 * 1024,

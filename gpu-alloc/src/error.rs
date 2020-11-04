@@ -3,11 +3,28 @@ use {
     gpu_alloc_types::{DeviceMapError, OutOfMemory},
 };
 
+/// Enumeration of possible errors that may occur during memory allocation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum AllocationError {
+    /// Backend reported that device memory has been exhausted.\
+    /// Deallocating device memory from the same heap may increase chance
+    /// that another allocation would succeed.
     OutOfDeviceMemory,
+
+    /// Backend reported that host memory has been exhausted.\
+    /// Deallocating host memory may increase chance that another allocation would succeed.
     OutOfHostMemory,
+
+    /// Allocation request cannot be fullfilled as no available memory types allowed
+    /// by `Request.memory_types` mask is compatible with `request.usage`.
     NoCompatibleMemoryTypes,
+
+    /// Reached limit on allocated memory objects count.\
+    /// Deallocating device memory may increase chance that another allocation would succeed.
+    /// Especially dedicated memory blocks.
+    ///
+    /// If this error is returned when memory heaps are far from exhausted
+    /// `Config` should be tweaked to allocate larger memory objects.
     TooManyObjects,
 }
 
@@ -26,10 +43,10 @@ impl Display for AllocationError {
             AllocationError::OutOfDeviceMemory => fmt.write_str("Device memory exhausted"),
             AllocationError::OutOfHostMemory => fmt.write_str("Host memory exhausted"),
             AllocationError::NoCompatibleMemoryTypes => fmt.write_str(
-                "No compatible memory types from requested mask support requested usage",
+                "No compatible memory types from requested types support requested usage",
             ),
             AllocationError::TooManyObjects => {
-                fmt.write_str("Reached limit on memory objects count")
+                fmt.write_str("Reached limit on allocated memory objects count")
             }
         }
     }
@@ -38,11 +55,26 @@ impl Display for AllocationError {
 #[cfg(feature = "std")]
 impl std::error::Error for AllocationError {}
 
+/// Enumeration of possible errors that may occur during memory mapping.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum MapError {
+    /// Backend reported that device memory has been exhausted.\
+    /// Deallocating device memory from the same heap may increase chance
+    /// that another mapping would succeed.
     OutOfDeviceMemory,
+
+    /// Backend reported that host memory has been exhausted.\
+    /// Deallocating host memory may increase chance that another mapping would succeed.
     OutOfHostMemory,
+
+    /// Attempt to map memory block with non-host-visible memory type.\
+    /// Ensure to include `UsageFlags::HOST_ACCESS` into allocation request
+    /// when memory mapping is intended.
     NonHostVisible,
+
+    /// Map failed for implementation specific reason.\
+    /// For Vulkan backend this includes failed attempt
+    /// to allocate large enough virtual address space.
     MapFailed,
 }
 

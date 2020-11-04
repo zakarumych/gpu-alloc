@@ -22,6 +22,7 @@ use core::fmt::Debug as MemoryBounds;
 #[cfg(not(feature = "tracing"))]
 use core::any::Any as MemoryBounds;
 
+/// Memory allocator for Vulkan-like APIs.
 pub struct GpuAllocator<M> {
     dedicated_treshold: u64,
     preferred_dedicated_treshold: u64,
