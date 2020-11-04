@@ -139,7 +139,7 @@ where
         self.alloc_internal(device, request, Some(strategy))
     }
 
-    pub unsafe fn alloc_internal(
+    unsafe fn alloc_internal(
         &mut self,
         device: &impl MemoryDevice<M>,
         mut request: Request,
