@@ -4,27 +4,45 @@ use {
     core::ptr::NonNull,
 };
 
+/// Memory exhausted error.
 #[derive(Debug)]
 pub enum OutOfMemory {
+    /// Device memory exhausted.
     OutOfDeviceMemory,
+
+    /// Host memory exhausted.
     OutOfHostMemory,
 }
 
+/// Memory mapped error.
 #[derive(Debug)]
 pub enum DeviceMapError {
+    /// Device memory exhausted.
     OutOfDeviceMemory,
+
+    /// Host memory exhausted.
     OutOfHostMemory,
+
+    /// Map failed due to implementation specific error.
     MapFailed,
 }
 
+/// Specifies range of the mapped memory region.
 #[derive(Debug)]
 pub struct MappedMemoryRange<'a, M> {
+    /// Memory object reference.
     pub memory: &'a M,
+
+    /// Offset in bytes from start of the memory object.
     pub offset: u64,
+
+    /// Size in bytes of the memory range.
     pub size: u64,
 }
 
 /// Properties of the device that will be used for allocating memory objects.
+///
+/// See `gpu-alloc-<backend>` crate to learn how to obtain one for backend of choice.
 #[derive(Debug)]
 pub struct DeviceProperties<'a> {
     /// Array of memory types provided by the device.
