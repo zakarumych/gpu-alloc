@@ -7,7 +7,7 @@ use {
         heap::Heap,
         linear::{LinearAllocator, LinearBlock},
         usage::{MemoryForUsage, UsageFlags},
-        Dedicated, Request,
+        Dedicated, Request, Strategy,
     },
     alloc::boxed::Box,
     core::convert::TryFrom as _,
@@ -108,7 +108,42 @@ where
     pub unsafe fn alloc(
         &mut self,
         device: &impl MemoryDevice<M>,
+        request: Request,
+    ) -> Result<MemoryBlock<M>, AllocationError>
+    where
+        M: Clone,
+    {
+        self.alloc_internal(device, request, None)
+    }
+
+    /// Allocates memory block from specified `device` according to the `request`.
+    /// This function allows user to force specific allocation strategy.
+    /// Improper use can lead to suboptimal performance or too large overhead.
+    /// Prefer `GpuAllocator::alloc` if doubt.
+    ///
+    /// # Safety
+    ///
+    /// * `device` must be one with `DeviceProperties` that were provided to create this `GpuAllocator` instance.
+    /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
+    ///   and memory blocks allocated from it.
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
+    pub unsafe fn alloc_with_strategy(
+        &mut self,
+        device: &impl MemoryDevice<M>,
+        request: Request,
+        strategy: Strategy,
+    ) -> Result<MemoryBlock<M>, AllocationError>
+    where
+        M: Clone,
+    {
+        self.alloc_internal(device, request, Some(strategy))
+    }
+
+    pub unsafe fn alloc_internal(
+        &mut self,
+        device: &impl MemoryDevice<M>,
         mut request: Request,
+        strategy: Option<Strategy>,
     ) -> Result<MemoryBlock<M>, AllocationError>
     where
         M: Clone,
@@ -131,7 +166,7 @@ where
             return Err(AllocationError::NoCompatibleMemoryTypes);
         }
 
-        let strategy = match request.dedicated {
+        let strategy = strategy.unwrap_or_else(|| match request.dedicated {
             Dedicated::Required => Strategy::Dedicated,
             Dedicated::Preferred
                 if request.size >= self.preferred_dedicated_treshold
@@ -151,7 +186,7 @@ where
                 Strategy::Dedicated
             }
             _ => Strategy::Buddy,
-        };
+        });
 
         if let Strategy::Dedicated = strategy {
             if self.allocations_remains == 0 {
@@ -174,6 +209,10 @@ where
                 Strategy::Dedicated => {
                     if !heap.budget() >= request.size {
                         continue;
+                    }
+
+                    if self.allocations_remains == 0 {
+                        return Err(AllocationError::TooManyObjects);
                     }
 
                     #[cfg(feature = "tracing")]
@@ -368,12 +407,6 @@ where
             }
         }
     }
-}
-
-enum Strategy {
-    Dedicated,
-    Linear,
-    Buddy,
 }
 
 fn host_visible_non_coherent(props: MemoryPropertyFlags) -> bool {

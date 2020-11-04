@@ -71,28 +71,38 @@ pub struct Request {
     pub dedicated: Dedicated,
 }
 
+/// Specifies allocation strategy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Strategy {
+    /// Allocation directly from device.
+    /// Use with caution.
+    /// Very slow.
+    /// Count of allocations is limited.
+    Dedicated,
+
+    /// Linear allocation suitable for transient use case.
+    /// Minimal overhead when used properly.
+    /// Huge overhead if allocated memory block outlives
+    /// other blocks allocated from the same chunk.
+    Linear,
+
+    /// General purpose allocator with moderate overhead.
+    /// Splits bigger blocks in halves to satisfy smaller requests.
+    /// Deallocated memory is immediately reusable.
+    /// Deallocated twin blocks merge back into larger block.
+    Buddy,
+}
+
 /// Aligns `value` up to `align_maks`
 /// Returns smallest integer not lesser than `value` aligned by `align_mask`.
 /// Returns `None` on overflow.
-pub fn align_up(value: u64, align_mask: u64) -> Option<u64> {
+pub(crate) fn align_up(value: u64, align_mask: u64) -> Option<u64> {
     Some(value.checked_add(align_mask)? & !align_mask)
 }
 
 /// Align `value` down to `align_maks`
 /// Returns largest integer not bigger than `value` aligned by `align_mask`.
-pub fn align_down(value: u64, align_mask: u64) -> u64 {
-    value & !align_mask
-}
-
-/// Aligns `value` up to `align_maks`
-/// Returns smallest integer not lesser than `value` aligned by `align_mask`.
-/// Returns `None` on overflow.
-pub fn align_up_usize(value: usize, align_mask: usize) -> Option<usize> {
-    Some(value.checked_add(align_mask)? & !align_mask)
-}
-
-/// Align `value` down to `align_maks`
-/// Returns largest integer not bigger than `value` aligned by `align_mask`.
-pub fn align_down_usize(value: usize, align_mask: usize) -> usize {
+pub(crate) fn align_down(value: u64, align_mask: u64) -> u64 {
     value & !align_mask
 }
