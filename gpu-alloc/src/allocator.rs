@@ -167,27 +167,32 @@ where
             return Err(AllocationError::NoCompatibleMemoryTypes);
         }
 
-        let strategy = strategy.unwrap_or_else(|| match request.dedicated {
-            Dedicated::Required => Strategy::Dedicated,
-            Dedicated::Preferred
-                if request.size >= self.preferred_dedicated_treshold
-                    && self.allocations_remains > 0 =>
-            {
-                Strategy::Dedicated
-            }
-            _ if request.usage.contains(UsageFlags::TRANSIENT) => {
-                if request.size > self.transient_dedicated_treshold && self.allocations_remains > 0
+        let strategy = match strategy {
+            Some(Strategy::Linear) if request.size > self.linear_chunk => Strategy::Dedicated,
+            Some(other) => other,
+            None => match request.dedicated {
+                Dedicated::Required => Strategy::Dedicated,
+                Dedicated::Preferred
+                    if request.size >= self.preferred_dedicated_treshold
+                        && self.allocations_remains > 0 =>
                 {
                     Strategy::Dedicated
-                } else {
-                    Strategy::Linear
                 }
-            }
-            _ if request.size > self.dedicated_treshold && self.allocations_remains > 0 => {
-                Strategy::Dedicated
-            }
-            _ => Strategy::Buddy,
-        });
+                _ if request.usage.contains(UsageFlags::TRANSIENT) => {
+                    if request.size > self.transient_dedicated_treshold
+                        && self.allocations_remains > 0
+                    {
+                        Strategy::Dedicated
+                    } else {
+                        Strategy::Linear
+                    }
+                }
+                _ if request.size > self.dedicated_treshold && self.allocations_remains > 0 => {
+                    Strategy::Dedicated
+                }
+                _ => Strategy::Buddy,
+            },
+        };
 
         if let Strategy::Dedicated = strategy {
             if self.allocations_remains == 0 {
@@ -197,8 +202,8 @@ where
 
         for &index in self.memory_for_usage.types(request.usage) {
             let memory_type = &self.memory_types[index as usize];
-            let heap = memory_type.heap;
-            let heap = &mut self.memory_heaps[heap as usize];
+            let heap_index = memory_type.heap;
+            let heap = &mut self.memory_heaps[heap_index as usize];
 
             let map_mask = if host_visible_non_coherent(memory_type.props) {
                 self.non_coherent_atom_mask

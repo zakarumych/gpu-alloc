@@ -102,8 +102,10 @@ where
         M: Clone,
     {
         debug_assert!(
-            self.chunk_size < size,
-            "GpuAllocator must not request allocations equal or greater to chunks size"
+            size <= self.chunk_size,
+            "GpuAllocator must not request allocations (size {}) greater than chunks size ({})",
+            size,
+            self.chunk_size
         );
 
         let align_mask = align_mask | self.atom_mask;
