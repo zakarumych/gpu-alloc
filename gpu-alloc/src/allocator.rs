@@ -7,12 +7,13 @@ use {
         heap::Heap,
         linear::{LinearAllocator, LinearBlock},
         usage::{MemoryForUsage, UsageFlags},
-        Dedicated, Request, Strategy,
+        Request,
     },
     alloc::boxed::Box,
     core::convert::TryFrom as _,
     gpu_alloc_types::{
-        DeviceProperties, MemoryDevice, MemoryPropertyFlags, MemoryType, OutOfMemory,
+        AllocationFlags, DeviceProperties, MemoryDevice, MemoryPropertyFlags, MemoryType,
+        OutOfMemory,
     },
 };
 
@@ -36,9 +37,40 @@ pub struct GpuAllocator<M> {
     linear_chunk: u64,
     minimal_buddy_size: u64,
     initial_buddy_dedicated_size: u64,
+    buffer_device_address: bool,
 
     linear_allocators: Box<[Option<LinearAllocator<M>>]>,
     buddy_allocators: Box<[Option<BuddyAllocator<M>>]>,
+}
+
+/// Hints for allocator to decide on allocation strategy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Strategy {
+    /// Linear allocation suitable for transient use case.\
+    /// Minimal overhead when used properly.\
+    /// Huge overhead if allocated memory block outlives
+    /// other blocks allocated from the same chunk.
+    Linear,
+
+    /// General purpose allocator with moderate overhead.\
+    /// Splits bigger blocks in halves to satisfy smaller requests.\
+    /// Deallocated memory is immediately reusable.\
+    /// Deallocated twin blocks merge back into larger block.
+    Buddy,
+
+    /// Allocation directly from device.\
+    /// Very slow.
+    /// Count of allocations is limited.\
+    /// Use with caution.\
+    /// Must be used if resource has to be bound to dedicated memory object.
+    Dedicated,
+
+    /// Hint for allocator that dedicated memory object is preferred.\
+    /// Should be used if it is known that resource placed in dedicated memory object
+    /// would allow for better performance.\
+    /// Implementation is allowed to return block to shared memory object.
+    PreferDedicated,
 }
 
 impl<M> GpuAllocator<M>
@@ -85,6 +117,8 @@ where
                 .iter()
                 .map(|heap| Heap::new(heap.size))
                 .collect(),
+
+            buffer_device_address: props.buffer_device_address,
 
             allocations_remains: props.max_memory_allocation_count,
             non_coherent_atom_mask: props.non_coherent_atom_size - 1,
@@ -149,7 +183,18 @@ where
     where
         M: Clone,
     {
+        use Strategy::*;
+        enum ChosenStrategy {
+            Linear,
+            Buddy,
+            Dedicated,
+        }
+
         request.usage = with_implicit_usage_flags(request.usage);
+
+        if request.usage.contains(UsageFlags::DEVICE_ADDRESS) {
+            assert!(self.buffer_device_address, "`DEVICE_ADDRESS` cannot be requested when `DeviceProperties::buffer_device_address` is false");
+        }
 
         if request.size > self.max_memory_allocation_size {
             return Err(AllocationError::OutOfDeviceMemory);
@@ -167,29 +212,31 @@ where
             return Err(AllocationError::NoCompatibleMemoryTypes);
         }
 
-        let strategy = strategy.unwrap_or_else(|| match request.dedicated {
-            Dedicated::Required => Strategy::Dedicated,
-            Dedicated::Preferred
+        let strategy = match strategy {
+            Some(Dedicated) => ChosenStrategy::Dedicated,
+            Some(Linear) => ChosenStrategy::Linear,
+            Some(Buddy) => ChosenStrategy::Buddy,
+            Some(PreferDedicated)
                 if request.size >= self.preferred_dedicated_treshold
                     && self.allocations_remains > 0 =>
             {
-                Strategy::Dedicated
+                ChosenStrategy::Dedicated
             }
             _ if request.usage.contains(UsageFlags::TRANSIENT) => {
                 if request.size > self.transient_dedicated_treshold && self.allocations_remains > 0
                 {
-                    Strategy::Dedicated
+                    ChosenStrategy::Dedicated
                 } else {
-                    Strategy::Linear
+                    ChosenStrategy::Linear
                 }
             }
             _ if request.size > self.dedicated_treshold && self.allocations_remains > 0 => {
-                Strategy::Dedicated
+                ChosenStrategy::Dedicated
             }
-            _ => Strategy::Buddy,
-        });
+            _ => ChosenStrategy::Buddy,
+        };
 
-        if let Strategy::Dedicated = strategy {
+        if let ChosenStrategy::Dedicated = strategy {
             if self.allocations_remains == 0 {
                 return Err(AllocationError::TooManyObjects);
             }
@@ -206,14 +253,16 @@ where
                 0
             };
 
+            let flags = if self.buffer_device_address {
+                AllocationFlags::DEVICE_ADDRESS
+            } else {
+                AllocationFlags::empty()
+            };
+
             match strategy {
-                Strategy::Dedicated => {
+                ChosenStrategy::Dedicated => {
                     if !heap.budget() >= request.size {
                         continue;
-                    }
-
-                    if self.allocations_remains == 0 {
-                        return Err(AllocationError::TooManyObjects);
                     }
 
                     #[cfg(feature = "tracing")]
@@ -223,7 +272,7 @@ where
                         memory_type
                     );
 
-                    match device.allocate_memory(request.size, index) {
+                    match device.allocate_memory(request.size, index, flags) {
                         Ok(memory) => {
                             self.allocations_remains -= 1;
                             heap.alloc(request.size);
@@ -245,7 +294,7 @@ where
                         }
                     }
                 }
-                Strategy::Linear => {
+                ChosenStrategy::Linear => {
                     let allocator = match &mut self.linear_allocators[index as usize] {
                         Some(allocator) => allocator,
                         slot => {
@@ -266,7 +315,7 @@ where
                         device,
                         request.size,
                         request.align_mask,
-                        request.usage,
+                        flags,
                         heap,
                         &mut self.allocations_remains,
                     );
@@ -291,7 +340,7 @@ where
                         Err(err) => return Err(err),
                     }
                 }
-                Strategy::Buddy => {
+                ChosenStrategy::Buddy => {
                     let allocator = match &mut self.buddy_allocators[index as usize] {
                         Some(allocator) => allocator,
                         slot => {
@@ -313,6 +362,7 @@ where
                         device,
                         request.size,
                         request.align_mask,
+                        flags,
                         heap,
                         &mut self.allocations_remains,
                     );

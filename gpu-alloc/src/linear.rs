@@ -1,8 +1,8 @@
 use {
-    crate::{align_up, error::AllocationError, heap::Heap, usage::UsageFlags},
+    crate::{align_up, error::AllocationError, heap::Heap},
     alloc::collections::VecDeque,
     core::{convert::TryFrom as _, ptr::NonNull},
-    gpu_alloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
+    gpu_alloc_types::{AllocationFlags, DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
 #[cfg(feature = "tracing")]
@@ -53,7 +53,6 @@ struct Chunks<M> {
 #[derive(Debug)]
 pub(crate) struct LinearAllocator<M> {
     chunks: Chunks<M>,
-    chunks_unmapped: Chunks<M>,
     chunk_size: u64,
     memory_type: u32,
     props: MemoryPropertyFlags,
@@ -76,11 +75,6 @@ where
                 exhausted: VecDeque::new(),
                 offset: 0,
             },
-            chunks_unmapped: Chunks {
-                ready: None,
-                exhausted: VecDeque::new(),
-                offset: 0,
-            },
             chunk_size: min(chunk_size, isize::max_value()),
             memory_type,
             props,
@@ -94,7 +88,7 @@ where
         device: &impl MemoryDevice<M>,
         size: u64,
         align_mask: u64,
-        usage: UsageFlags,
+        flags: AllocationFlags,
         heap: &mut Heap,
         allocations_remains: &mut u32,
     ) -> Result<LinearBlock<M>, AllocationError>
@@ -107,168 +101,78 @@ where
         );
 
         let align_mask = align_mask | self.atom_mask;
+        let host_visible = self.host_visible();
 
-        if self.host_visible() {
-            if !usage.contains(UsageFlags::HOST_ACCESS) {
-                match &mut self.chunks_unmapped.ready {
-                    Some(ready) if fits(self.chunk_size, ready.allocated, size, align_mask) => {
-                        let chunks_offset = self.chunks_unmapped.offset;
-                        let exhausted = self.chunks_unmapped.exhausted.len() as u64;
-                        return Ok(Self::alloc_from_chunk(
-                            ready,
-                            self.chunk_size,
-                            chunks_offset,
-                            exhausted,
-                            size,
-                            align_mask,
-                        ));
-                    }
-                    ready => {
-                        self.chunks_unmapped
-                            .exhausted
-                            .extend(Some(ready.take().map(Chunk::exhaust)));
-                    }
-                }
+        match &mut self.chunks.ready {
+            Some(ready) if fits(self.chunk_size, ready.allocated, size, align_mask) => {
+                let chunks_offset = self.chunks.offset;
+                let exhausted = self.chunks.exhausted.len() as u64;
+                Ok(Self::alloc_from_chunk(
+                    ready,
+                    self.chunk_size,
+                    chunks_offset,
+                    exhausted,
+                    size,
+                    align_mask,
+                ))
             }
 
-            match &mut self.chunks.ready {
-                Some(ready) if fits(self.chunk_size, ready.allocated, size, align_mask) => {
-                    let chunks_offset = self.chunks.offset;
-                    let exhausted = self.chunks.exhausted.len() as u64;
-                    Ok(Self::alloc_from_chunk(
-                        ready,
-                        self.chunk_size,
-                        chunks_offset,
-                        exhausted,
-                        size,
-                        align_mask,
-                    ))
+            ready => {
+                self.chunks
+                    .exhausted
+                    .extend(Some(ready.take().map(Chunk::exhaust)));
+
+                if *allocations_remains == 0 {
+                    return Err(AllocationError::TooManyObjects);
                 }
 
-                ready => {
-                    self.chunks
-                        .exhausted
-                        .extend(Some(ready.take().map(Chunk::exhaust)));
+                let memory = device.allocate_memory(self.chunk_size, self.memory_type, flags)?;
 
-                    if *allocations_remains == 0 {
-                        return Err(AllocationError::TooManyObjects);
-                    }
+                *allocations_remains -= 1;
+                heap.alloc(self.chunk_size);
 
-                    let memory = device.allocate_memory(self.chunk_size, self.memory_type)?;
-
-                    *allocations_remains -= 1;
-                    heap.alloc(self.chunk_size);
-
+                let ptr = if host_visible {
                     match device.map_memory(&memory, 0, self.chunk_size) {
-                        Ok(ptr) => {
-                            let ready = ready.get_or_insert(Chunk {
-                                ptr: Some(ptr),
-                                memory,
-                                allocated: 0,
-                                offset: 0,
-                            });
-
-                            let chunks_offset = self.chunks.offset;
-                            let exhausted = self.chunks.exhausted.len() as u64;
-                            Ok(Self::alloc_from_chunk(
-                                ready,
-                                self.chunk_size,
-                                chunks_offset,
-                                exhausted,
-                                size,
-                                align_mask,
-                            ))
-                        }
+                        Ok(ptr) => Some(ptr),
                         Err(DeviceMapError::MapFailed) => {
-                            if !usage.contains(UsageFlags::HOST_ACCESS) {
-                                #[cfg(feature = "tracing")]
-                                tracing::warn!("Failed to map host-visible memory in linear allocator. This request does not require host-access");
+                            #[cfg(feature = "tracing")]
+                            tracing::error!(
+                                "Failed to map host-visible memory in linear allocator"
+                            );
+                            device.deallocate_memory(memory);
+                            *allocations_remains += 1;
+                            heap.dealloc(self.chunk_size);
 
-                                debug_assert!(self.chunks_unmapped.ready.is_none());
-                                let ready = self.chunks_unmapped.ready.get_or_insert(Chunk {
-                                    ptr: None,
-                                    memory,
-                                    allocated: 0,
-                                    offset: 0,
-                                });
-
-                                let chunks_offset = self.chunks_unmapped.offset;
-                                let exhausted = self.chunks_unmapped.exhausted.len() as u64;
-                                Ok(Self::alloc_from_chunk(
-                                    ready,
-                                    self.chunk_size,
-                                    chunks_offset,
-                                    exhausted,
-                                    size,
-                                    align_mask,
-                                ))
-                            } else {
-                                #[cfg(feature = "tracing")]
-                                tracing::error!(
-                                    "Failed to map host-visible memory in linear allocator"
-                                );
-                                device.deallocate_memory(memory);
-                                *allocations_remains += 1;
-                                heap.dealloc(self.chunk_size);
-
-                                Err(AllocationError::OutOfHostMemory)
-                            }
+                            return Err(AllocationError::OutOfHostMemory);
                         }
                         Err(DeviceMapError::OutOfDeviceMemory) => {
-                            Err(AllocationError::OutOfDeviceMemory)
+                            return Err(AllocationError::OutOfDeviceMemory);
                         }
                         Err(DeviceMapError::OutOfHostMemory) => {
-                            Err(AllocationError::OutOfHostMemory)
+                            return Err(AllocationError::OutOfHostMemory);
                         }
                     }
-                }
-            }
-        } else {
-            debug_assert!(
-                !usage.contains(UsageFlags::HOST_ACCESS),
-                "GpuAllocator must not try to alloc non-host-visible memory for request with `HOST_ACCESS` usage",
-            );
+                } else {
+                    None
+                };
 
-            match &mut self.chunks_unmapped.ready {
-                Some(ready) if fits(self.chunk_size, ready.allocated, size, align_mask) => {
-                    let chunks_offset = self.chunks_unmapped.offset;
-                    let exhausted = self.chunks_unmapped.exhausted.len() as u64;
-                    Ok(Self::alloc_from_chunk(
-                        ready,
-                        self.chunk_size,
-                        chunks_offset,
-                        exhausted,
-                        size,
-                        align_mask,
-                    ))
-                }
-                ready => {
-                    self.chunks_unmapped
-                        .exhausted
-                        .extend(Some(ready.take().map(Chunk::exhaust)));
+                let ready = ready.get_or_insert(Chunk {
+                    ptr,
+                    memory,
+                    allocated: 0,
+                    offset: 0,
+                });
 
-                    let memory = device.allocate_memory(self.chunk_size, self.memory_type)?;
-                    *allocations_remains -= 1;
-                    heap.alloc(self.chunk_size);
-
-                    let ready = self.chunks_unmapped.ready.get_or_insert(Chunk {
-                        ptr: None,
-                        memory,
-                        allocated: 0,
-                        offset: 0,
-                    });
-
-                    let chunks_offset = self.chunks_unmapped.offset;
-                    let exhausted = self.chunks_unmapped.exhausted.len() as u64;
-                    Ok(Self::alloc_from_chunk(
-                        ready,
-                        self.chunk_size,
-                        chunks_offset,
-                        exhausted,
-                        size,
-                        align_mask,
-                    ))
-                }
+                let chunks_offset = self.chunks.offset;
+                let exhausted = self.chunks.exhausted.len() as u64;
+                Ok(Self::alloc_from_chunk(
+                    ready,
+                    self.chunk_size,
+                    chunks_offset,
+                    exhausted,
+                    size,
+                    align_mask,
+                ))
             }
         }
     }
@@ -281,25 +185,16 @@ where
         heap: &mut Heap,
         allocations_remains: &mut u32,
     ) {
-        if block.ptr.is_some() {
-            Self::dealloc_from_chunks(
-                device,
-                &mut self.chunks,
-                block.chunk,
-                self.chunk_size,
-                heap,
-                allocations_remains,
-            );
-        } else {
-            Self::dealloc_from_chunks(
-                device,
-                &mut self.chunks_unmapped,
-                block.chunk,
-                self.chunk_size,
-                heap,
-                allocations_remains,
-            );
-        }
+        debug_assert_eq!(block.ptr.is_some(), self.host_visible());
+
+        Self::dealloc_from_chunks(
+            device,
+            &mut self.chunks,
+            block.chunk,
+            self.chunk_size,
+            heap,
+            allocations_remains,
+        );
     }
 
     unsafe fn dealloc_from_chunks(

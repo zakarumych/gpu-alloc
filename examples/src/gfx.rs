@@ -6,7 +6,7 @@ use {
         queue::QueueFamily as _,
         Features, Instance as _,
     },
-    gpu_alloc::{Config, Dedicated, GpuAllocator, Request, UsageFlags},
+    gpu_alloc::{Config, GpuAllocator, Request, UsageFlags},
     gpu_alloc_gfx::{gfx_device_properties, GfxMemoryDevice},
 };
 
@@ -66,7 +66,6 @@ fn main() -> eyre::Result<()> {
                 align_mask: 1,
                 usage: UsageFlags::HOST_ACCESS,
                 memory_types: !0,
-                dedicated: Dedicated::Indifferent,
             },
         )
     }?;

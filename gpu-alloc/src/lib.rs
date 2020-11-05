@@ -40,29 +40,6 @@ pub use {
     gpu_alloc_types::*,
 };
 
-/// Possible requirements for dedicated memory object allocation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Dedicated {
-    /// No requirements.
-    /// Should be used for most cases.
-    Indifferent,
-
-    /// Hint for allocator that dedicated memory object is preferred.
-    /// Should be used if it is known that resource placed in dedicated memory object would allow for better performance.
-    /// Implementation is allowed to return block to shared memory object.
-    Preferred,
-
-    /// Specifies that dedicated memory block MUST be returned.
-    /// Should be used only if resource has to be bound to dedicated memory object.
-    Required,
-}
-
-impl Default for Dedicated {
-    fn default() -> Self {
-        Dedicated::Indifferent
-    }
-}
-
 /// Memory request for allocator.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Request {
@@ -85,32 +62,6 @@ pub struct Request {
     /// Returned block will be from memory type corresponding to one of set bits,
     /// use `MemoryBlock::memory_type` to learn memory type index of returned block.
     pub memory_types: u32,
-
-    /// Specifies if dedicated memory object is required, preferred or not.
-    pub dedicated: Dedicated,
-}
-
-/// Specifies allocation strategy.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-#[non_exhaustive]
-pub enum Strategy {
-    /// Allocation directly from device.
-    /// Use with caution.
-    /// Very slow.
-    /// Count of allocations is limited.
-    Dedicated,
-
-    /// Linear allocation suitable for transient use case.
-    /// Minimal overhead when used properly.
-    /// Huge overhead if allocated memory block outlives
-    /// other blocks allocated from the same chunk.
-    Linear,
-
-    /// General purpose allocator with moderate overhead.
-    /// Splits bigger blocks in halves to satisfy smaller requests.
-    /// Deallocated memory is immediately reusable.
-    /// Deallocated twin blocks merge back into larger block.
-    Buddy,
 }
 
 /// Aligns `value` up to `align_maks`

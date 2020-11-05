@@ -1,7 +1,7 @@
 use {
     gpu_alloc::{
-        Config, Dedicated, DeviceProperties, GpuAllocator, MemoryHeap, MemoryPropertyFlags,
-        MemoryType, Request, UsageFlags,
+        Config, DeviceProperties, GpuAllocator, MemoryHeap, MemoryPropertyFlags, MemoryType,
+        Request, UsageFlags,
     },
     gpu_alloc_mock::MockMemoryDevice,
     std::borrow::Cow,
@@ -19,6 +19,7 @@ fn main() -> eyre::Result<()> {
         max_memory_allocation_count: 32,
         max_memory_allocation_size: 1024 * 1024,
         non_coherent_atom_size: 8,
+        buffer_device_address: false,
     });
 
     let config = Config::i_am_potato();
@@ -33,7 +34,6 @@ fn main() -> eyre::Result<()> {
                 align_mask: 1,
                 usage: UsageFlags::HOST_ACCESS,
                 memory_types: !0,
-                dedicated: Dedicated::Indifferent,
             },
         )
     }?;

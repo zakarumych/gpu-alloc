@@ -2,7 +2,7 @@ use {
     crate::{align_up, error::AllocationError, heap::Heap, slab::Slab},
     alloc::vec::Vec,
     core::{convert::TryFrom as _, hint::unreachable_unchecked, mem::replace, ptr::NonNull},
-    gpu_alloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
+    gpu_alloc_types::{AllocationFlags, DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
 
 #[cfg(feature = "tracing")]
@@ -313,6 +313,7 @@ where
         device: &impl MemoryDevice<M>,
         size: u64,
         align_mask: u64,
+        flags: AllocationFlags,
         heap: &mut Heap,
         allocations_remains: &mut u32,
     ) -> Result<BuddyBlock<M>, AllocationError>
@@ -353,7 +354,7 @@ where
                 }
 
                 let chunk_size = self.minimal_size << (candidate_size_index + 1);
-                let memory = device.allocate_memory(chunk_size, self.memory_type)?;
+                let memory = device.allocate_memory(chunk_size, self.memory_type, flags)?;
                 *allocations_remains -= 1;
                 heap.alloc(chunk_size);
 
