@@ -21,6 +21,9 @@ pub(crate) struct BuddyBlock<M> {
     pub index: usize,
 }
 
+unsafe impl<M> Sync for BuddyBlock<M> where M: Sync {}
+unsafe impl<M> Send for BuddyBlock<M> where M: Send {}
+
 #[derive(Clone, Copy)]
 enum PairState {
     Exhausted,
@@ -272,6 +275,9 @@ pub(crate) struct BuddyAllocator<M> {
     props: MemoryPropertyFlags,
     atom_mask: u64,
 }
+
+unsafe impl<M> Sync for BuddyAllocator<M> where M: Sync {}
+unsafe impl<M> Send for BuddyAllocator<M> where M: Send {}
 
 impl<M> BuddyAllocator<M>
 where

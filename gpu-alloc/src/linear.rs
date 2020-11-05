@@ -20,6 +20,9 @@ pub(crate) struct LinearBlock<M> {
     pub chunk: u64,
 }
 
+unsafe impl<M> Sync for LinearBlock<M> where M: Sync {}
+unsafe impl<M> Send for LinearBlock<M> where M: Send {}
+
 #[derive(Debug)]
 struct Chunk<M> {
     memory: M,
@@ -59,6 +62,9 @@ pub(crate) struct LinearAllocator<M> {
     props: MemoryPropertyFlags,
     atom_mask: u64,
 }
+
+unsafe impl<M> Sync for LinearAllocator<M> where M: Sync {}
+unsafe impl<M> Send for LinearAllocator<M> where M: Send {}
 
 impl<M> LinearAllocator<M>
 where
