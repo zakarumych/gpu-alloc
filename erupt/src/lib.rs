@@ -1,5 +1,5 @@
 use {
-    erupt::{vk1_0, DeviceLoader, InstanceLoader},
+    erupt::{vk1_0, vk1_1, DeviceLoader, ExtendableFrom as _, InstanceLoader},
     gpu_alloc_types::{
         AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
         MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
@@ -31,17 +31,21 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
         memory_type: u32,
         flags: AllocationFlags,
     ) -> Result<vk1_0::DeviceMemory, OutOfMemory> {
-        match self
-            .device
-            .allocate_memory(
-                &vk1_0::MemoryAllocateInfoBuilder::new()
-                    .allocation_size(size)
-                    .memory_type_index(memory_type),
-                None,
-                None,
-            )
-            .result()
-        {
+        assert!((flags & !(AllocationFlags::DEVICE_ADDRESS)).is_empty());
+
+        let mut info = vk1_0::MemoryAllocateInfoBuilder::new()
+            .allocation_size(size)
+            .memory_type_index(memory_type);
+
+        let mut info_flags;
+
+        if flags.contains(AllocationFlags::DEVICE_ADDRESS) {
+            info_flags = vk1_1::MemoryAllocateFlagsInfoBuilder::new()
+                .flags(vk1_1::MemoryAllocateFlags::DEVICE_ADDRESS);
+            info = info.extend_from(&mut info_flags);
+        }
+
+        match self.device.allocate_memory(&info, None, None).result() {
             Ok(memory) => Ok(memory),
             Err(vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY) => Err(OutOfMemory::OutOfDeviceMemory),
             Err(vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY) => Err(OutOfMemory::OutOfHostMemory),
@@ -168,12 +172,14 @@ pub unsafe fn device_properties(
 
     let buffer_device_address =
         if instance.enabled.vk1_1 || instance.enabled.khr_get_display_properties2 {
-            if instance.enabled.vk1_2 || {
+            let mut bda_features_available = instance.enabled.vk1_2;
+
+            if !bda_features_available {
                 let extensions = instance
                     .enumerate_device_extension_properties(physical_device, None, None)
                     .result()?;
 
-                extensions.iter().any(|ext| {
+                bda_features_available = extensions.iter().any(|ext| {
                     let name = CStr::from_bytes_with_nul({
                         std::slice::from_raw_parts(
                             ext.extension_name.as_ptr() as *const _,
@@ -185,8 +191,10 @@ pub unsafe fn device_properties(
                     } else {
                         false
                     }
-                })
-            } {
+                });
+            }
+
+            if bda_features_available {
                 let features = PhysicalDeviceFeatures2::default().into_builder();
                 let mut bda_features = PhysicalDeviceBufferDeviceAddressFeatures::default();
                 let features = features.extend_from(&mut bda_features);
