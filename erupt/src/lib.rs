@@ -1,8 +1,8 @@
 use {
-    erupt::{vk1_0, DeviceLoader, InstanceLoader},
+    erupt::{vk1_0, vk1_1, DeviceLoader, ExtendableFrom as _, InstanceLoader},
     gpu_alloc_types::{
-        DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
-        MemoryPropertyFlags, MemoryType, OutOfMemory,
+        AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
+        MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
     std::ptr::NonNull,
     tinyvec::TinyVec,
@@ -29,18 +29,23 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
         &self,
         size: u64,
         memory_type: u32,
+        flags: AllocationFlags,
     ) -> Result<vk1_0::DeviceMemory, OutOfMemory> {
-        match self
-            .device
-            .allocate_memory(
-                &vk1_0::MemoryAllocateInfoBuilder::new()
-                    .allocation_size(size)
-                    .memory_type_index(memory_type),
-                None,
-                None,
-            )
-            .result()
-        {
+        assert!((flags & !(AllocationFlags::DEVICE_ADDRESS)).is_empty());
+
+        let mut info = vk1_0::MemoryAllocateInfoBuilder::new()
+            .allocation_size(size)
+            .memory_type_index(memory_type);
+
+        let mut info_flags;
+
+        if flags.contains(AllocationFlags::DEVICE_ADDRESS) {
+            info_flags = vk1_1::MemoryAllocateFlagsInfoBuilder::new()
+                .flags(vk1_1::MemoryAllocateFlags::DEVICE_ADDRESS);
+            info = info.extend_from(&mut info_flags);
+        }
+
+        match self.device.allocate_memory(&info, None, None).result() {
             Ok(memory) => Ok(memory),
             Err(vk1_0::Result::ERROR_OUT_OF_DEVICE_MEMORY) => Err(OutOfMemory::OutOfDeviceMemory),
             Err(vk1_0::Result::ERROR_OUT_OF_HOST_MEMORY) => Err(OutOfMemory::OutOfHostMemory),
@@ -142,15 +147,67 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
 /// # Safety
 ///
 /// `physical_device` must be queried from `Instance` associated with this `instance`.
+/// Even if returned properties' field `buffer_device_address` is set to true,
+/// feature `PhysicalDeviceBufferDeviceAddressFeatures::buffer_derive_address`  must be enabled explicitly on device creation
+/// and extension "VK_KHR_buffer_device_address" for Vulkan prior 1.2.
+/// Otherwise the field must be set to false before passing to `GpuAllocator::new`.
 pub unsafe fn device_properties(
     instance: &InstanceLoader,
     physical_device: vk1_0::PhysicalDevice,
-) -> DeviceProperties<'static> {
+) -> Result<DeviceProperties<'static>, vk1_0::Result> {
+    use {
+        erupt::{
+            extensions::khr_buffer_device_address::KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+            vk1_1::PhysicalDeviceFeatures2, vk1_2::PhysicalDeviceBufferDeviceAddressFeatures,
+            ExtendableFrom as _,
+        },
+        std::ffi::CStr,
+    };
+
     let limits = instance
         .get_physical_device_properties(physical_device, None)
         .limits;
+
     let memory_properties = instance.get_physical_device_memory_properties(physical_device, None);
-    DeviceProperties {
+
+    let buffer_device_address =
+        if instance.enabled.vk1_1 || instance.enabled.khr_get_display_properties2 {
+            let mut bda_features_available = instance.enabled.vk1_2;
+
+            if !bda_features_available {
+                let extensions = instance
+                    .enumerate_device_extension_properties(physical_device, None, None)
+                    .result()?;
+
+                bda_features_available = extensions.iter().any(|ext| {
+                    let name = CStr::from_bytes_with_nul({
+                        std::slice::from_raw_parts(
+                            ext.extension_name.as_ptr() as *const _,
+                            ext.extension_name.len(),
+                        )
+                    });
+                    if let Ok(name) = name {
+                        name == { CStr::from_ptr(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) }
+                    } else {
+                        false
+                    }
+                });
+            }
+
+            if bda_features_available {
+                let features = PhysicalDeviceFeatures2::default().into_builder();
+                let mut bda_features = PhysicalDeviceBufferDeviceAddressFeatures::default();
+                let features = features.extend_from(&mut bda_features);
+                instance.get_physical_device_features2(physical_device, Some(features.build()));
+                bda_features.buffer_device_address != 0
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+    Ok(DeviceProperties {
         max_memory_allocation_count: limits.max_memory_allocation_count,
         max_memory_allocation_size: u64::max_value(), // FIXME: Can query this information if instance is v1.1
         non_coherent_atom_size: limits.non_coherent_atom_size,
@@ -169,7 +226,8 @@ pub unsafe fn device_properties(
                 size: memory_heap.size,
             })
             .collect(),
-    }
+        buffer_device_address,
+    })
 }
 
 pub fn memory_properties_from_erupt(props: vk1_0::MemoryPropertyFlags) -> MemoryPropertyFlags {

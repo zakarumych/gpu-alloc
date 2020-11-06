@@ -6,8 +6,8 @@ use {
         Backend, MemoryTypeId,
     },
     gpu_alloc_types::{
-        DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
-        MemoryPropertyFlags, MemoryType, OutOfMemory,
+        AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
+        MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
     std::{convert::TryFrom as _, ptr::NonNull, sync::Arc},
 };
@@ -43,7 +43,10 @@ where
         &self,
         size: u64,
         memory_type: u32,
+        flags: AllocationFlags,
     ) -> Result<Arc<B::Memory>, OutOfMemory> {
+        debug_assert!(flags.is_empty(), "No allocation flags supported");
+
         let memory_type =
             MemoryTypeId(usize::try_from(memory_type).expect("memory_type out of bound"));
 
@@ -171,6 +174,7 @@ where
                 size: memory_heap_size,
             })
             .collect(),
+        buffer_device_address: false,
     }
 }
 

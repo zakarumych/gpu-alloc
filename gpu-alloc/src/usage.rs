@@ -113,13 +113,12 @@ fn one_usage(usage: UsageFlags, memory_types: &[MemoryType]) -> MemoryForOneUsag
 }
 
 fn compatible(usage: UsageFlags, flags: MemoryPropertyFlags) -> bool {
-    if flags.contains(MemoryPropertyFlags::LAZILY_ALLOCATED)
-        || flags.contains(MemoryPropertyFlags::PROTECTED)
-    {
+    type Flags = MemoryPropertyFlags;
+    if flags.contains(Flags::LAZILY_ALLOCATED) || flags.contains(Flags::PROTECTED) {
         false
     } else if usage.intersects(UsageFlags::HOST_ACCESS | UsageFlags::UPLOAD | UsageFlags::DOWNLOAD)
     {
-        flags.contains(MemoryPropertyFlags::HOST_VISIBLE)
+        flags.contains(Flags::HOST_VISIBLE)
     } else {
         true
     }

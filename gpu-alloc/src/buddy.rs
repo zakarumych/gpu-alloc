@@ -1,15 +1,12 @@
 use {
-    crate::{align_up, error::AllocationError, heap::Heap, slab::Slab},
+    crate::{
+        align_up, error::AllocationError, heap::Heap, slab::Slab, unreachable_unchecked,
+        MemoryBounds,
+    },
     alloc::vec::Vec,
-    core::{convert::TryFrom as _, hint::unreachable_unchecked, mem::replace, ptr::NonNull},
-    gpu_alloc_types::{DeviceMapError, MemoryDevice, MemoryPropertyFlags},
+    core::{convert::TryFrom as _, mem::replace, ptr::NonNull},
+    gpu_alloc_types::{AllocationFlags, DeviceMapError, MemoryDevice, MemoryPropertyFlags},
 };
-
-#[cfg(feature = "tracing")]
-use core::fmt::Debug as MemoryBounds;
-
-#[cfg(not(feature = "tracing"))]
-use core::any::Any as MemoryBounds;
 
 #[derive(Debug)]
 pub(crate) struct BuddyBlock<M> {
@@ -56,14 +53,6 @@ enum Side {
     Right,
 }
 use Side::*;
-impl Side {
-    fn bit(&self) -> u8 {
-        match self {
-            Left => 0,
-            Right => 1,
-        }
-    }
-}
 
 struct PairEntry {
     state: PairState,
@@ -79,10 +68,10 @@ struct SizeBlockEntry {
 }
 
 struct Size {
-    ready: usize,
+    next_ready: usize,
     pairs: Slab<PairEntry>,
 }
-
+#[derive(Debug)]
 enum Release {
     None,
     Parent(usize),
@@ -93,16 +82,20 @@ impl Size {
     fn new() -> Self {
         Size {
             pairs: Slab::new(),
-            ready: 0,
+            next_ready: 0,
         }
     }
 
-    fn add_pair_and_acquire_left(
+    unsafe fn add_pair_and_acquire_left(
         &mut self,
         chunk: usize,
         offset: u64,
         parent: Option<usize>,
     ) -> SizeBlockEntry {
+        if self.next_ready < self.pairs.len() {
+            unreachable_unchecked()
+        }
+
         let index = self.pairs.insert(PairEntry {
             state: PairState::Exhausted,
             chunk,
@@ -110,46 +103,29 @@ impl Size {
             parent,
         });
 
-        // if self.ready >= self.pairs.len() {
-        self.ready = index;
-        let entry = unsafe { self.pairs.get_unchecked_mut(index) };
+        let entry = self.pairs.get_unchecked_mut(index);
         entry.state = PairState::Ready {
             next: index,
             prev: index,
             ready: Right, // Left is allocated.
         };
-        // } else {
-        //     unsafe { unreachable_unchecked() }
-
-        // let next = self.ready;
-        // let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
-        // let prev = unsafe { next_entry.state.replace_prev(index) };
-
-        // let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
-        // let prev_next = unsafe { prev_entry.state.replace_next(index) };
-        // debug_assert_eq!(prev_next, next);
-
-        // let entry = unsafe { self.pairs.get_unchecked_mut(index) };
-        // entry.state = PairState::Ready {
-        //     next,
-        //     prev,
-        //     ready: Right, // Left is allocated.
-        // }
-        // }
+        self.next_ready = index;
 
         SizeBlockEntry {
             chunk,
             offset,
-            index,
+            index: index << 1,
         }
     }
 
     fn acquire(&mut self, size: u64) -> Option<SizeBlockEntry> {
-        if self.ready >= self.pairs.len() {
+        if self.next_ready >= self.pairs.len() {
             return None;
         }
 
-        let entry = unsafe { self.pairs.get_unchecked_mut(self.ready) };
+        let next_ready = self.next_ready;
+
+        let entry = unsafe { self.pairs.get_unchecked_mut(next_ready) };
         let chunk = entry.chunk;
         let offset = entry.offset;
 
@@ -158,33 +134,45 @@ impl Size {
             PairState::Ready { ready, next, prev } => {
                 entry.state = PairState::Exhausted;
 
-                let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
-                let prev_next = unsafe { prev_entry.state.replace_next(next) };
-                debug_assert_eq!(prev_next, self.ready);
+                if prev == self.next_ready {
+                    debug_assert_eq!(next, self.next_ready);
+                    self.next_ready = self.pairs.len();
+                } else {
+                    let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
+                    let prev_next = unsafe { prev_entry.state.replace_next(next) };
+                    debug_assert_eq!(prev_next, self.next_ready);
 
-                let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
-                let next_prev = unsafe { next_entry.state.replace_prev(prev) };
-                debug_assert_eq!(next_prev, self.ready);
-                ready.bit()
+                    let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
+                    let next_prev = unsafe { next_entry.state.replace_prev(prev) };
+                    debug_assert_eq!(next_prev, self.next_ready);
+
+                    self.next_ready = next;
+                }
+
+                match ready {
+                    Left => 0,
+                    Right => 1,
+                }
             }
         };
 
         Some(SizeBlockEntry {
             chunk,
             offset: offset + bit as u64 * size,
-            index: (self.ready << 1) | bit as usize,
+            index: (next_ready << 1) | bit as usize,
         })
     }
 
     fn release(&mut self, index: usize) -> Release {
         let side = match index & 1 {
-            0 => Left,
-            1 => Right,
+            0 => Side::Left,
+            1 => Side::Right,
             _ => unsafe { unreachable_unchecked() },
         };
         let index = index >> 1;
 
         let len = self.pairs.len();
+
         let entry = self.pairs.get_mut(index);
 
         let chunk = entry.chunk;
@@ -193,17 +181,17 @@ impl Size {
 
         match (entry.state, side) {
             (PairState::Exhausted, side) => {
-                if self.ready == len {
+                if self.next_ready == len {
                     entry.state = PairState::Ready {
                         ready: side,
                         next: index,
                         prev: index,
                     };
-                    self.ready = index;
+                    self.next_ready = index;
                 } else {
-                    debug_assert!(self.ready < len);
+                    debug_assert!(self.next_ready < len);
 
-                    let next = self.ready;
+                    let next = self.next_ready;
                     let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
                     let prev = unsafe { next_entry.state.replace_prev(index) };
 
@@ -241,13 +229,22 @@ impl Size {
                 },
                 Side::Left,
             ) => {
-                let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
-                let prev_next = unsafe { prev_entry.state.replace_next(next) };
-                debug_assert_eq!(prev_next, index);
+                entry.state = PairState::Exhausted;
 
-                let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
-                let next_prev = unsafe { next_entry.state.replace_prev(prev) };
-                debug_assert_eq!(next_prev, index);
+                if prev == index {
+                    debug_assert_eq!(next, index);
+                    self.next_ready = self.pairs.len();
+                } else {
+                    let prev_entry = unsafe { self.pairs.get_unchecked_mut(prev) };
+                    let prev_next = unsafe { prev_entry.state.replace_next(next) };
+                    debug_assert_eq!(prev_next, index);
+
+                    let next_entry = unsafe { self.pairs.get_unchecked_mut(next) };
+                    let next_prev = unsafe { next_entry.state.replace_prev(prev) };
+                    debug_assert_eq!(next_prev, index);
+
+                    self.next_ready = next;
+                }
 
                 match parent {
                     Some(parent) => Release::Parent(parent),
@@ -319,6 +316,7 @@ where
         device: &impl MemoryDevice<M>,
         size: u64,
         align_mask: u64,
+        flags: AllocationFlags,
         heap: &mut Heap,
         allocations_remains: &mut u32,
     ) -> Result<BuddyBlock<M>, AllocationError>
@@ -335,13 +333,14 @@ where
         let size_index =
             usize::try_from(size_index).map_err(|_| AllocationError::OutOfDeviceMemory)?;
 
-        if self.sizes.len() <= size_index {
+        while self.sizes.len() <= size_index {
             self.sizes.push(Size::new());
         }
 
         let host_visible = self.host_visible();
 
         let mut candidate_size_index = size_index;
+
         let (mut entry, entry_size_index) = loop {
             let sizes_len = self.sizes.len();
 
@@ -359,7 +358,7 @@ where
                 }
 
                 let chunk_size = self.minimal_size << (candidate_size_index + 1);
-                let memory = device.allocate_memory(chunk_size, self.memory_type)?;
+                let memory = device.allocate_memory(chunk_size, self.memory_type, flags)?;
                 *allocations_remains -= 1;
                 heap.alloc(chunk_size);
 
@@ -437,6 +436,8 @@ where
                     debug_assert_eq!(chunk, block.chunk);
                     let chunk = self.chunks.remove(chunk);
                     debug_assert_eq!(chunk.size, self.minimal_size << (release_size_index + 1));
+
+                    drop(block);
                     device.deallocate_memory(chunk.memory);
                     *allocations_remains += 1;
                     heap.dealloc(chunk.size);

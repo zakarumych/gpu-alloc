@@ -59,6 +59,19 @@ pub struct DeviceProperties<'a> {
 
     /// Atom size for host mappable non-coherent memory.
     pub non_coherent_atom_size: u64,
+
+    /// Specifies if feature required to fetch device address is enabled.
+    pub buffer_device_address: bool,
+}
+
+bitflags::bitflags! {
+    /// Allocation flags
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    pub struct AllocationFlags : u8 {
+        /// Specifies that the memory can used for buffers created with flag that allows
+        /// fetching device address.
+        const DEVICE_ADDRESS = 0x1;
+    }
 }
 
 /// Abstract device that allocated memory to sub-allocate.
@@ -72,7 +85,12 @@ pub trait MemoryDevice<M> {
     ///
     /// `memory_type` must be valid index for memory type associated with this device.
     /// Retreiving this information is implementation specific.
-    unsafe fn allocate_memory(&self, size: u64, memory_type: u32) -> Result<M, OutOfMemory>;
+    unsafe fn allocate_memory(
+        &self,
+        size: u64,
+        memory_type: u32,
+        flags: AllocationFlags,
+    ) -> Result<M, OutOfMemory>;
 
     /// Deallocate memory object.
     /// All clones of specified memory handle become invalid.

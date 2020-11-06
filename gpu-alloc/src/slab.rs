@@ -1,13 +1,11 @@
-use {
-    alloc::vec::Vec,
-    core::{hint::unreachable_unchecked, mem::replace},
-};
+use {crate::unreachable_unchecked, alloc::vec::Vec, core::mem::replace};
 
+#[derive(Debug)]
 enum Entry<T> {
     Vacant(usize),
     Occupied(T),
 }
-
+#[derive(Debug)]
 pub(crate) struct Slab<T> {
     next_vacant: usize,
     entries: Vec<Entry<T>>,
@@ -45,6 +43,8 @@ impl<T> Slab<T> {
     }
 
     pub unsafe fn get_unchecked(&self, index: usize) -> &T {
+        debug_assert!(index < self.len());
+
         match self.entries.get_unchecked(index) {
             Entry::Occupied(value) => value,
             _ => unreachable_unchecked(),
@@ -52,6 +52,8 @@ impl<T> Slab<T> {
     }
 
     pub unsafe fn get_unchecked_mut(&mut self, index: usize) -> &mut T {
+        debug_assert!(index < self.len());
+
         match self.entries.get_unchecked_mut(index) {
             Entry::Occupied(value) => value,
             _ => unreachable_unchecked(),
