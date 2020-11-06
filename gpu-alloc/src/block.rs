@@ -19,6 +19,9 @@ pub struct MemoryBlock<M> {
     pub(crate) flavor: MemoryBlockFlavor,
 }
 
+unsafe impl<M> Sync for MemoryBlock<M> where M: Sync {}
+unsafe impl<M> Send for MemoryBlock<M> where M: Send {}
+
 #[derive(Debug)]
 pub(crate) enum MemoryBlockFlavor {
     Dedicated,
