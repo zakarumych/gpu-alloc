@@ -1,4 +1,7 @@
-use gpu_alloc_types::{MemoryPropertyFlags, MemoryType};
+use {
+    core::fmt::{self, Debug},
+    gpu_alloc_types::{MemoryPropertyFlags, MemoryType},
+};
 
 bitflags::bitflags! {
     /// Memory usage type.
@@ -48,6 +51,14 @@ struct MemoryForOneUsage {
 
 pub(crate) struct MemoryForUsage {
     usages: [MemoryForOneUsage; 64],
+}
+
+impl Debug for MemoryForUsage {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("MemoryForUsage")
+            .field("usages", &&self.usages[..])
+            .finish()
+    }
 }
 
 impl MemoryForUsage {

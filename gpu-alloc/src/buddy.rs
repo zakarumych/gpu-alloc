@@ -21,7 +21,7 @@ pub(crate) struct BuddyBlock<M> {
 unsafe impl<M> Sync for BuddyBlock<M> where M: Sync {}
 unsafe impl<M> Send for BuddyBlock<M> where M: Send {}
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum PairState {
     Exhausted,
     Ready {
@@ -47,13 +47,14 @@ impl PairState {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Side {
     Left,
     Right,
 }
 use Side::*;
 
+#[derive(Debug)]
 struct PairEntry {
     state: PairState,
     chunk: usize,
@@ -67,6 +68,7 @@ struct SizeBlockEntry {
     index: usize,
 }
 
+#[derive(Debug)]
 struct Size {
     next_ready: usize,
     pairs: Slab<PairEntry>,
@@ -258,12 +260,14 @@ impl Size {
     }
 }
 
+#[derive(Debug)]
 struct Chunk<M> {
     memory: M,
     ptr: Option<NonNull<u8>>,
     size: u64,
 }
 
+#[derive(Debug)]
 pub(crate) struct BuddyAllocator<M> {
     minimal_size: u64,
     chunks: Slab<Chunk<M>>,
