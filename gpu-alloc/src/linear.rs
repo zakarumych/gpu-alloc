@@ -112,7 +112,7 @@ where
 
             ready => {
                 self.exhausted
-                    .extend(Some(ready.take().map(Chunk::exhaust)));
+                    .extend(ready.take().map(Chunk::exhaust).map(Some));
 
                 if *allocations_remains == 0 {
                     return Err(AllocationError::TooManyObjects);
@@ -179,25 +179,8 @@ where
     ) {
         debug_assert_eq!(block.ptr.is_some(), self.host_visible());
 
-        self.dealloc_from_chunks(
-            device,
-            block.chunk,
-            self.chunk_size,
-            heap,
-            allocations_remains,
-        );
-    }
-
-    unsafe fn dealloc_from_chunks(
-        &mut self,
-        device: &impl MemoryDevice<M>,
-        chunk: u64,
-        chunk_size: u64,
-        heap: &mut Heap,
-        allocations_remains: &mut u32,
-    ) {
-        debug_assert!(chunk > self.offset, "Chunk index is less than chunk offset in this allocator. Probably incorrect allocator instance");
-        let chunk_offset = chunk - self.offset;
+        debug_assert!(block.chunk >= self.offset, "Chunk index is less than chunk offset in this allocator. Probably incorrect allocator instance");
+        let chunk_offset = block.chunk - self.offset;
         match usize::try_from(chunk_offset) {
             Ok(chunk_offset) => {
                 if chunk_offset > self.exhausted.len() {
@@ -217,7 +200,7 @@ where
                         let memory = self.exhausted[chunk_offset].take().unwrap().memory;
                         device.deallocate_memory(memory);
                         *allocations_remains += 1;
-                        heap.dealloc(chunk_size);
+                        heap.dealloc(self.chunk_size);
 
                         if chunk_offset == 0 {
                             while let Some(None) = self.exhausted.get(0) {
