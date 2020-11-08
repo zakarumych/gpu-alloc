@@ -27,6 +27,8 @@ struct Chunk<M> {
 
 impl<M> Chunk<M> {
     fn exhaust(self) -> ExhaustedChunk<M> {
+        debug_assert_ne!(self.allocated, 0, "Unused chunk cannot be exhaused");
+
         ExhaustedChunk {
             memory: self.memory,
             allocated: self.allocated,
@@ -192,6 +194,10 @@ where
                         "Chunk index is out of bounds. Probably incorrect allocator instance",
                     );
                     chunk.allocated -= 1;
+                    if chunk.allocated == 0 {
+                        // Reuse chunk.
+                        chunk.offset = 0;
+                    }
                 } else {
                     let chunk = &mut self.exhausted[chunk_offset].as_mut().expect("Chunk index points to deallocated chunk. Probably incorrect allocator instance");
                     chunk.allocated -= 1;
