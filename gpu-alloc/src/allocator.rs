@@ -1,28 +1,24 @@
 use {
     crate::{
-        block::{MemoryBlock, MemoryBlockFlavor},
+        block::{MemoryBlock, MemoryBlockFlavor, Relevant},
         buddy::{BuddyAllocator, BuddyBlock},
         config::Config,
         error::AllocationError,
         heap::Heap,
         linear::{LinearAllocator, LinearBlock},
         usage::{MemoryForUsage, UsageFlags},
-        Dedicated, Request, Strategy,
+        MemoryBounds, Request,
     },
     alloc::boxed::Box,
     core::convert::TryFrom as _,
     gpu_alloc_types::{
-        DeviceProperties, MemoryDevice, MemoryPropertyFlags, MemoryType, OutOfMemory,
+        AllocationFlags, DeviceProperties, MemoryDevice, MemoryPropertyFlags, MemoryType,
+        OutOfMemory,
     },
 };
 
-#[cfg(feature = "tracing")]
-use core::fmt::Debug as MemoryBounds;
-
-#[cfg(not(feature = "tracing"))]
-use core::any::Any as MemoryBounds;
-
 /// Memory allocator for Vulkan-like APIs.
+#[derive(Debug)]
 pub struct GpuAllocator<M> {
     dedicated_treshold: u64,
     preferred_dedicated_treshold: u64,
@@ -31,14 +27,34 @@ pub struct GpuAllocator<M> {
     memory_for_usage: MemoryForUsage,
     memory_types: Box<[MemoryType]>,
     memory_heaps: Box<[Heap]>,
+    max_allocation_count: u32,
     allocations_remains: u32,
     non_coherent_atom_mask: u64,
     linear_chunk: u64,
     minimal_buddy_size: u64,
     initial_buddy_dedicated_size: u64,
+    buffer_device_address: bool,
 
     linear_allocators: Box<[Option<LinearAllocator<M>>]>,
     buddy_allocators: Box<[Option<BuddyAllocator<M>>]>,
+}
+
+/// Hints for allocator to decide on allocation strategy.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Dedicated {
+    /// Allocation directly from device.\
+    /// Very slow.
+    /// Count of allocations is limited.\
+    /// Use with caution.\
+    /// Must be used if resource has to be bound to dedicated memory object.
+    Required,
+
+    /// Hint for allocator that dedicated memory object is preferred.\
+    /// Should be used if it is known that resource placed in dedicated memory object
+    /// would allow for better performance.\
+    /// Implementation is allowed to return block to shared memory object.
+    Preferred,
 }
 
 impl<M> GpuAllocator<M>
@@ -86,6 +102,9 @@ where
                 .map(|heap| Heap::new(heap.size))
                 .collect(),
 
+            buffer_device_address: props.buffer_device_address,
+
+            max_allocation_count: props.max_memory_allocation_count,
             allocations_remains: props.max_memory_allocation_count,
             non_coherent_atom_mask: props.non_coherent_atom_size - 1,
 
@@ -128,31 +147,47 @@ where
     /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
     ///   and memory blocks allocated from it.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
-    pub unsafe fn alloc_with_strategy(
+    pub unsafe fn alloc_with_dedicated(
         &mut self,
         device: &impl MemoryDevice<M>,
         request: Request,
-        strategy: Strategy,
+        dedicated: Dedicated,
     ) -> Result<MemoryBlock<M>, AllocationError>
     where
         M: Clone,
     {
-        self.alloc_internal(device, request, Some(strategy))
+        self.alloc_internal(device, request, Some(dedicated))
     }
 
     unsafe fn alloc_internal(
         &mut self,
         device: &impl MemoryDevice<M>,
         mut request: Request,
-        strategy: Option<Strategy>,
+        dedicated: Option<Dedicated>,
     ) -> Result<MemoryBlock<M>, AllocationError>
     where
         M: Clone,
     {
+        enum Strategy {
+            Linear,
+            Buddy,
+            Dedicated,
+        }
+
         request.usage = with_implicit_usage_flags(request.usage);
+
+        if request.usage.contains(UsageFlags::DEVICE_ADDRESS) {
+            assert!(self.buffer_device_address, "`DEVICE_ADDRESS` cannot be requested when `DeviceProperties::buffer_device_address` is false");
+        }
 
         if request.size > self.max_memory_allocation_size {
             return Err(AllocationError::OutOfDeviceMemory);
+        }
+
+        if let Some(Dedicated::Required) = dedicated {
+            if self.allocations_remains == 0 {
+                return Err(AllocationError::TooManyObjects);
+            }
         }
 
         if 0 == self.memory_for_usage.mask(request.usage) & request.memory_types {
@@ -167,33 +202,7 @@ where
             return Err(AllocationError::NoCompatibleMemoryTypes);
         }
 
-        let strategy = strategy.unwrap_or_else(|| match request.dedicated {
-            Dedicated::Required => Strategy::Dedicated,
-            Dedicated::Preferred
-                if request.size >= self.preferred_dedicated_treshold
-                    && self.allocations_remains > 0 =>
-            {
-                Strategy::Dedicated
-            }
-            _ if request.usage.contains(UsageFlags::TRANSIENT) => {
-                if request.size > self.transient_dedicated_treshold && self.allocations_remains > 0
-                {
-                    Strategy::Dedicated
-                } else {
-                    Strategy::Linear
-                }
-            }
-            _ if request.size > self.dedicated_treshold && self.allocations_remains > 0 => {
-                Strategy::Dedicated
-            }
-            _ => Strategy::Buddy,
-        });
-
-        if let Strategy::Dedicated = strategy {
-            if self.allocations_remains == 0 {
-                return Err(AllocationError::TooManyObjects);
-            }
-        }
+        let transient = request.usage.contains(UsageFlags::TRANSIENT);
 
         for &index in self.memory_for_usage.types(request.usage) {
             let memory_type = &self.memory_types[index as usize];
@@ -206,14 +215,43 @@ where
                 0
             };
 
+            let flags = if self.buffer_device_address {
+                AllocationFlags::DEVICE_ADDRESS
+            } else {
+                AllocationFlags::empty()
+            };
+
+            let linear_chunk = self.linear_chunk.min(heap.size() / 32);
+
+            let strategy = match (dedicated, transient) {
+                (Some(Dedicated::Required), _) => Strategy::Dedicated,
+                (Some(Dedicated::Preferred), _)
+                    if request.size >= self.preferred_dedicated_treshold =>
+                {
+                    Strategy::Dedicated
+                }
+                (_, true) => {
+                    let treshold = self.transient_dedicated_treshold.min(linear_chunk);
+
+                    if request.size < treshold {
+                        Strategy::Linear
+                    } else {
+                        Strategy::Dedicated
+                    }
+                }
+                (_, false) => {
+                    if request.size < self.dedicated_treshold {
+                        Strategy::Buddy
+                    } else {
+                        Strategy::Dedicated
+                    }
+                }
+            };
+
             match strategy {
                 Strategy::Dedicated => {
                     if !heap.budget() >= request.size {
                         continue;
-                    }
-
-                    if self.allocations_remains == 0 {
-                        return Err(AllocationError::TooManyObjects);
                     }
 
                     #[cfg(feature = "tracing")]
@@ -223,7 +261,7 @@ where
                         memory_type
                     );
 
-                    match device.allocate_memory(request.size, index) {
+                    match device.allocate_memory(request.size, index, flags) {
                         Ok(memory) => {
                             self.allocations_remains -= 1;
                             heap.alloc(request.size);
@@ -237,6 +275,7 @@ where
                                 map_mask,
                                 mapped: false,
                                 flavor: MemoryBlockFlavor::Dedicated,
+                                relevant: Relevant,
                             });
                         }
                         Err(OutOfMemory::OutOfDeviceMemory) => continue,
@@ -251,7 +290,7 @@ where
                         slot => {
                             let memory_type = &self.memory_types[index as usize];
                             slot.get_or_insert(LinearAllocator::new(
-                                self.linear_chunk.min(heap.size() / 32),
+                                linear_chunk,
                                 index,
                                 memory_type.props,
                                 if host_visible_non_coherent(memory_type.props) {
@@ -266,7 +305,7 @@ where
                         device,
                         request.size,
                         request.align_mask,
-                        request.usage,
+                        flags,
                         heap,
                         &mut self.allocations_remains,
                     );
@@ -285,6 +324,7 @@ where
                                     chunk: block.chunk,
                                     ptr: block.ptr,
                                 },
+                                relevant: Relevant,
                             })
                         }
                         Err(AllocationError::OutOfDeviceMemory) => continue,
@@ -295,10 +335,20 @@ where
                     let allocator = match &mut self.buddy_allocators[index as usize] {
                         Some(allocator) => allocator,
                         slot => {
+                            let minimal_buddy_size = self
+                                .minimal_buddy_size
+                                .min(heap.size() / 1024)
+                                .next_power_of_two();
+
+                            let initial_buddy_dedicated_size = self
+                                .initial_buddy_dedicated_size
+                                .min(heap.size() / 32)
+                                .next_power_of_two();
+
                             let memory_type = &self.memory_types[index as usize];
                             slot.get_or_insert(BuddyAllocator::new(
-                                self.minimal_buddy_size.min(heap.size() / 1024),
-                                self.initial_buddy_dedicated_size.min(heap.size() / 32),
+                                minimal_buddy_size,
+                                initial_buddy_dedicated_size,
                                 index,
                                 memory_type.props,
                                 if host_visible_non_coherent(memory_type.props) {
@@ -313,6 +363,7 @@ where
                         device,
                         request.size,
                         request.align_mask,
+                        flags,
                         heap,
                         &mut self.allocations_remains,
                     );
@@ -332,6 +383,7 @@ where
                                     ptr: block.ptr,
                                     index: block.index,
                                 },
+                                relevant: Relevant,
                             })
                         }
                         Err(AllocationError::OutOfDeviceMemory) => continue,
@@ -356,10 +408,11 @@ where
     pub unsafe fn dealloc(&mut self, device: &impl MemoryDevice<M>, block: MemoryBlock<M>) {
         match block.flavor {
             MemoryBlockFlavor::Dedicated => {
-                device.deallocate_memory(block.memory);
-                self.allocations_remains += 1;
                 let heap = self.memory_types[block.memory_type as usize].heap;
-                self.memory_heaps[heap as usize].dealloc(block.size);
+                let block_size = block.size;
+                device.deallocate_memory(block.deallocate());
+                self.allocations_remains += 1;
+                self.memory_heaps[heap as usize].dealloc(block_size);
             }
             MemoryBlockFlavor::Linear { chunk, ptr } => {
                 let memory_type = block.memory_type;
@@ -373,9 +426,9 @@ where
                 allocator.dealloc(
                     device,
                     LinearBlock {
-                        memory: block.memory,
                         offset: block.offset,
                         size: block.size,
+                        memory: block.deallocate(),
                         ptr,
                         chunk,
                     },
@@ -395,9 +448,9 @@ where
                 allocator.dealloc(
                     device,
                     BuddyBlock {
-                        memory: block.memory,
                         offset: block.offset,
                         size: block.size,
+                        memory: block.deallocate(),
                         index,
                         ptr,
                         chunk,
@@ -406,6 +459,21 @@ where
                     &mut self.allocations_remains,
                 );
             }
+        }
+    }
+
+    /// Deallocates leftover memory objects.
+    /// Should be used before dropping.
+    ///
+    /// # Safety
+    ///
+    /// * `device` must be one with `DeviceProperties` that were provided to create this `GpuAllocator` instance
+    /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
+    ///   and memory blocks allocated from it
+    #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
+    pub unsafe fn cleanup(&mut self, device: &impl MemoryDevice<M>) {
+        for allocator in self.linear_allocators.iter_mut().filter_map(Option::as_mut) {
+            allocator.cleanup(device);
         }
     }
 }

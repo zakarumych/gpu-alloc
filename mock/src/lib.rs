@@ -1,7 +1,7 @@
 use {
     gpu_alloc_types::{
-        DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
-        MemoryPropertyFlags, MemoryType, OutOfMemory,
+        AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
+        MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
     slab::Slab,
     std::{
@@ -30,6 +30,7 @@ pub struct MockMemoryDevice {
     max_memory_allocation_count: u32,
     max_memory_allocation_size: u64,
     non_coherent_atom_size: u64,
+    buffer_device_address: bool,
 
     allocations_remains: Cell<u32>,
     memory_heaps_remaining_capacity: Box<[Cell<u64>]>,
@@ -51,6 +52,7 @@ impl MockMemoryDevice {
             max_memory_allocation_count: props.max_memory_allocation_count,
             max_memory_allocation_size: props.max_memory_allocation_size,
             non_coherent_atom_size: props.non_coherent_atom_size,
+            buffer_device_address: props.buffer_device_address,
 
             allocations_remains: Cell::new(props.max_memory_allocation_count),
             allocations: RefCell::new(Slab::new()),
@@ -64,13 +66,22 @@ impl MockMemoryDevice {
             max_memory_allocation_count: self.max_memory_allocation_count,
             max_memory_allocation_size: self.max_memory_allocation_size,
             non_coherent_atom_size: self.non_coherent_atom_size,
+            buffer_device_address: self.buffer_device_address,
         }
     }
 }
 
 impl MemoryDevice<usize> for MockMemoryDevice {
     #[tracing::instrument(skip(self))]
-    unsafe fn allocate_memory(&self, size: u64, memory_type: u32) -> Result<usize, OutOfMemory> {
+    unsafe fn allocate_memory(
+        &self,
+        size: u64,
+        memory_type: u32,
+        flags: AllocationFlags,
+    ) -> Result<usize, OutOfMemory> {
+        assert!(self.buffer_device_address || !flags.contains(AllocationFlags::DEVICE_ADDRESS),
+        "`AllocationFlags::DEVICE_ADDRESS` cannot be specified unless DeviceProperties contain `DeviceProperties::device_address is true`");
+
         assert!(
             size <= self.max_memory_allocation_size,
             "Allocation size exceeds limit"

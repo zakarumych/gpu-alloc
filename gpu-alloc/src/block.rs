@@ -8,6 +8,26 @@ use {
 };
 
 #[derive(Debug)]
+pub(crate) struct Relevant;
+
+impl Drop for Relevant {
+    #[cfg(feature = "tracing")]
+    fn drop(&mut self) {
+        tracing::error!("Memory block wasn't deallocated");
+    }
+
+    #[cfg(all(not(feature = "tracing"), feature = "std"))]
+    fn drop(&mut self) {
+        eprintln!("Memory block wasn't deallocated")
+    }
+
+    #[cfg(all(not(feature = "tracing"), not(feature = "std")))]
+    fn drop(&mut self) {
+        panic!("Memory block wasn't deallocated")
+    }
+}
+
+#[derive(Debug)]
 pub struct MemoryBlock<M> {
     pub(crate) memory_type: u32,
     pub(crate) props: MemoryPropertyFlags,
@@ -17,6 +37,14 @@ pub struct MemoryBlock<M> {
     pub(crate) map_mask: u64,
     pub(crate) mapped: bool,
     pub(crate) flavor: MemoryBlockFlavor,
+    pub(crate) relevant: Relevant,
+}
+
+impl<M> MemoryBlock<M> {
+    pub fn deallocate(self) -> M {
+        core::mem::forget(self.relevant);
+        self.memory
+    }
 }
 
 unsafe impl<M> Sync for MemoryBlock<M> where M: Sync {}
@@ -130,7 +158,7 @@ impl<M> MemoryBlock<M> {
     /// The caller must guarantee that any previously submitted command that reads or writes to this range has completed.
     #[inline(always)]
     pub unsafe fn write_bytes(
-        &self,
+        &mut self,
         device: &impl MemoryDevice<M>,
         offset: u64,
         data: &[u8],
@@ -171,7 +199,7 @@ impl<M> MemoryBlock<M> {
     /// The caller must guarantee that any previously submitted command that reads to this range has completed.
     #[inline(always)]
     pub unsafe fn read_bytes(
-        &self,
+        &mut self,
         device: &impl MemoryDevice<M>,
         offset: u64,
         data: &mut [u8],

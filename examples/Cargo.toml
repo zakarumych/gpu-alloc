@@ -5,6 +5,11 @@ authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 publish = false
 
+[features]
+tracing = ["gpu-alloc/tracing"]
+mock = ["gpu-alloc-mock"]
+gfx = ["gpu-alloc-gfx"]
+
 [dependencies]
 gpu-alloc = { path = "../gpu-alloc", version = "=0.1" }
 eyre = "0.6"

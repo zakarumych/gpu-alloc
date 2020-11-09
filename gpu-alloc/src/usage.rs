@@ -1,4 +1,7 @@
-use gpu_alloc_types::{MemoryPropertyFlags, MemoryType};
+use {
+    core::fmt::{self, Debug},
+    gpu_alloc_types::{MemoryPropertyFlags, MemoryType},
+};
 
 bitflags::bitflags! {
     /// Memory usage type.
@@ -48,6 +51,14 @@ struct MemoryForOneUsage {
 
 pub(crate) struct MemoryForUsage {
     usages: [MemoryForOneUsage; 64],
+}
+
+impl Debug for MemoryForUsage {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt.debug_struct("MemoryForUsage")
+            .field("usages", &&self.usages[..])
+            .finish()
+    }
 }
 
 impl MemoryForUsage {
@@ -113,13 +124,12 @@ fn one_usage(usage: UsageFlags, memory_types: &[MemoryType]) -> MemoryForOneUsag
 }
 
 fn compatible(usage: UsageFlags, flags: MemoryPropertyFlags) -> bool {
-    if flags.contains(MemoryPropertyFlags::LAZILY_ALLOCATED)
-        || flags.contains(MemoryPropertyFlags::PROTECTED)
-    {
+    type Flags = MemoryPropertyFlags;
+    if flags.contains(Flags::LAZILY_ALLOCATED) || flags.contains(Flags::PROTECTED) {
         false
     } else if usage.intersects(UsageFlags::HOST_ACCESS | UsageFlags::UPLOAD | UsageFlags::DOWNLOAD)
     {
-        flags.contains(MemoryPropertyFlags::HOST_VISIBLE)
+        flags.contains(Flags::HOST_VISIBLE)
     } else {
         true
     }
