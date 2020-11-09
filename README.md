@@ -9,6 +9,22 @@
 
 Implementation agnostic memory allocator for Vulkan like APIs.
 
+This crate is intended to be used as part of safe API implementations.\
+Use with caution. There are unsafe functions all over the place.
+
+## Usage
+
+Start with fetching `DeviceProperties` from `gfx-alloc-<backend>` crate for the backend of choice.\
+Then create `GpuAllocator` instance and use it for all device memory allocations.\
+`GpuAllocator` will take care for all necessary bookkeeping like memory object count limit,
+heap budget and memory mapping.
+
+#### Backends implementations
+
+Backend supporting crates should not depend on this crate.\
+Instead they should depend on `gpu-alloc-types` which is much more stable,
+allowing to upgrade `gpu-alloc` version without `gfx-alloc-<backend>` upgrade.
+
 
 Supported Rust Versions
 

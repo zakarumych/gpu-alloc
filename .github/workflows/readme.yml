@@ -6,14 +6,14 @@ on:
     paths: 
       - 'README.md'
       - 'README.tpl'
-      - 'gpu-alloc/lib.rs'
+      - 'gpu-alloc/src/lib.rs'
   pull_request:
     types: [ opened, edited ]
     branches: [ master ]
     paths: 
       - 'README.md'
       - 'README.tpl'
-      - 'gpu-alloc/lib.rs'
+      - 'gpu-alloc/src/lib.rs'
 
 env:
   CARGO_TERM_COLOR: always
