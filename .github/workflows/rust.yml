@@ -5,11 +5,13 @@ on:
     branches: [ master ]
     paths: 
       - '**.rs'
+      - '**/Cargo.toml'
   pull_request:
     types: [ opened, edited ]
     branches: [ master ]
     paths: 
       - '**.rs'
+      - '**/Cargo.toml'
 
 env:
   CARGO_TERM_COLOR: always
