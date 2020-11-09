@@ -68,15 +68,15 @@ bitflags::bitflags! {
     /// Allocation flags
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct AllocationFlags : u8 {
-        /// Specifies that the memory can used for buffers created with flag that allows
-        /// fetching device address.
+        /// Specifies that the memory can be used for buffers created
+        /// with flag that allows fetching device address.
         const DEVICE_ADDRESS = 0x1;
     }
 }
 
-/// Abstract device that allocated memory to sub-allocate.
+/// Abstract device that can be used to allocate memory objects.
 pub trait MemoryDevice<M> {
-    /// Allocate new memory object from device.
+    /// Allocates new memory object from device.
     /// This function may be expensive and even limit maximum number of memory
     /// objects allocated.
     /// Which is the reason for sub-allocation this crate provides.
@@ -85,6 +85,8 @@ pub trait MemoryDevice<M> {
     ///
     /// `memory_type` must be valid index for memory type associated with this device.
     /// Retreiving this information is implementation specific.
+    ///
+    /// `flags` must be supported by the device.
     unsafe fn allocate_memory(
         &self,
         size: u64,
@@ -93,11 +95,11 @@ pub trait MemoryDevice<M> {
     ) -> Result<M, OutOfMemory>;
 
     /// Deallocate memory object.
-    /// All clones of specified memory handle become invalid.
     ///
     /// # Safety
     ///
-    /// Memory object must have been allocated from this device.
+    /// Memory object must have been allocated from this device.\
+    /// All clones of specified memory handle must be dropped before calling this function.
     unsafe fn deallocate_memory(&self, memory: M);
 
     /// Map region of device memory to host memory space.

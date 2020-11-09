@@ -27,6 +27,7 @@ impl Drop for Relevant {
     }
 }
 
+/// Memory block allocated by `GpuAllocator`.
 #[derive(Debug)]
 pub struct MemoryBlock<M> {
     pub(crate) memory_type: u32,
@@ -41,7 +42,7 @@ pub struct MemoryBlock<M> {
 }
 
 impl<M> MemoryBlock<M> {
-    pub fn deallocate(self) -> M {
+    pub(crate) fn deallocate(self) -> M {
         core::mem::forget(self.relevant);
         self.memory
     }

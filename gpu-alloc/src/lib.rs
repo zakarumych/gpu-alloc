@@ -1,6 +1,9 @@
 //!
 //! Implementation agnostic memory allocator for Vulkan like APIs.
 //!
+//! This crate is intended to be used as part of safe API implementations.\
+//! Use with caution. There are unsafe functions all over the place.
+//!
 //! # Usage
 //!
 //! Start with fetching `DeviceProperties` from `gfx-alloc-<backend>` crate for the backend of choice.\
@@ -8,13 +11,7 @@
 //! `GpuAllocator` will take care for all necessary bookkeeping like memory object count limit,
 //! heap budget and memory mapping.
 //!
-//! There are many `unsafe` functions in this crate, but most of them has only one unchecked safety requirement -
-//! only one `device` should be used with `GpuAllocator` instance and all blocks allocated with it.
-//! Other safety requirements should be as easy to fullfill.
-//!
-//! #
-//!
-//! ### Note
+//! ### Backends implementations
 //!
 //! Backend supporting crates should not depend on this crate.\
 //! Instead they should depend on `gpu-alloc-types` which is much more stable,
