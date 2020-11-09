@@ -240,7 +240,9 @@ where
                     }
                 }
                 (_, false) => {
-                    if request.size < self.dedicated_treshold {
+                    let treshold = self.dedicated_treshold.min(heap.size() / 32);
+
+                    if request.size < treshold {
                         Strategy::Buddy
                     } else {
                         Strategy::Dedicated
