@@ -205,6 +205,11 @@ where
         let transient = request.usage.contains(UsageFlags::TRANSIENT);
 
         for &index in self.memory_for_usage.types(request.usage) {
+            if 0 == request.memory_types & (1 << index) {
+                // Skip memory type incompatible with the request.
+                continue;
+            }
+
             let memory_type = &self.memory_types[index as usize];
             let heap = memory_type.heap;
             let heap = &mut self.memory_heaps[heap as usize];
