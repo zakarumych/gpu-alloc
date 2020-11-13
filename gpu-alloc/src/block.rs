@@ -3,12 +3,13 @@ use {
     core::{
         convert::TryFrom as _,
         ptr::{copy_nonoverlapping, NonNull},
+        sync::atomic::{AtomicU8, Ordering::*},
     },
     gpu_alloc_types::{MappedMemoryRange, MemoryDevice, MemoryPropertyFlags},
 };
 
 #[derive(Debug)]
-pub(crate) struct Relevant;
+struct Relevant;
 
 impl Drop for Relevant {
     #[cfg(feature = "tracing")]
@@ -27,24 +28,50 @@ impl Drop for Relevant {
     }
 }
 
+const MAPPING_STATE_UNMAPPED: u8 = 0;
+const MAPPING_STATE_MAPPED: u8 = 1;
+const MAPPING_STATE_UNMAPPING: u8 = 2;
+
 /// Memory block allocated by `GpuAllocator`.
 #[derive(Debug)]
 pub struct MemoryBlock<M> {
-    pub(crate) memory_type: u32,
-    pub(crate) props: MemoryPropertyFlags,
-    pub(crate) memory: M,
-    pub(crate) offset: u64,
-    pub(crate) size: u64,
-    pub(crate) map_mask: u64,
-    pub(crate) mapped: bool,
-    pub(crate) flavor: MemoryBlockFlavor,
-    pub(crate) relevant: Relevant,
+    memory: M,
+    memory_type: u32,
+    props: MemoryPropertyFlags,
+    offset: u64,
+    size: u64,
+    map_mask: u64,
+    mapped: AtomicU8,
+    flavor: MemoryBlockFlavor,
+    relevant: Relevant,
 }
 
 impl<M> MemoryBlock<M> {
-    pub(crate) fn deallocate(self) -> M {
+    pub(crate) fn new(
+        memory: M,
+        memory_type: u32,
+        props: MemoryPropertyFlags,
+        offset: u64,
+        size: u64,
+        map_mask: u64,
+        flavor: MemoryBlockFlavor,
+    ) -> Self {
+        MemoryBlock {
+            memory,
+            memory_type,
+            props,
+            offset,
+            size,
+            map_mask,
+            flavor,
+            mapped: AtomicU8::new(MAPPING_STATE_UNMAPPED),
+            relevant: Relevant,
+        }
+    }
+
+    pub(crate) fn deallocate(self) -> (M, MemoryBlockFlavor) {
         core::mem::forget(self.relevant);
-        self.memory
+        (self.memory, self.flavor)
     }
 }
 
@@ -117,15 +144,57 @@ impl<M> MemoryBlock<M> {
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
     pub unsafe fn map(
-        &mut self,
+        &self,
         device: &impl MemoryDevice<M>,
         offset: u64,
         size: usize,
     ) -> Result<NonNull<u8>, MapError> {
-        self.assert_unmapped();
+        let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
+        let size = align_up(size_u64, self.map_mask)
+            .expect("aligned `size` doesn't fit device address space");
 
-        let ptr = self.map_memory_internal(device, offset, size)?;
-        self.mapped = true;
+        let aligned_offset = align_down(offset, self.map_mask);
+
+        assert!(offset < self.size, "`offset` is out of memory block bounds");
+        assert!(
+            size_u64 <= self.size - offset,
+            "`offset + size` is out of memory block bounds"
+        );
+
+        let ptr = match self.flavor {
+            MemoryBlockFlavor::Dedicated => {
+                let offset_align_shift = offset - aligned_offset;
+                let offset_align_shift = isize::try_from(offset_align_shift)
+                    .expect("`non_coherent_atom_size` is too large");
+
+                if !self.acquire_mapping() {
+                    return Err(MapError::AlreadyMapped);
+                }
+                let aligned_size = offset + size - aligned_offset;
+                let result =
+                    device.map_memory(&self.memory, self.offset + aligned_offset, aligned_size);
+
+                match result {
+                    Ok(ptr) => ptr.as_ptr().offset(offset_align_shift),
+                    Err(err) => {
+                        self.mapping_failed();
+                        return Err(err.into());
+                    }
+                }
+            }
+            MemoryBlockFlavor::Linear { ptr: Some(ptr), .. }
+            | MemoryBlockFlavor::Buddy { ptr: Some(ptr), .. } => {
+                if !self.acquire_mapping() {
+                    return Err(MapError::AlreadyMapped);
+                }
+
+                let offset_isize = isize::try_from(offset)
+                    .expect("Buddy and linear block should fit host address space");
+                ptr.as_ptr().offset(offset_isize)
+            }
+            _ => return Err(MapError::NonHostVisible),
+        };
+
         Ok(NonNull::new_unchecked(ptr))
     }
 
@@ -140,10 +209,19 @@ impl<M> MemoryBlock<M> {
     ///
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
-    pub unsafe fn unmap(&mut self, device: &impl MemoryDevice<M>) {
-        self.assert_mapped();
-        self.unmap_memory_internal(device);
-        self.mapped = false;
+    pub unsafe fn unmap(&mut self, device: &impl MemoryDevice<M>) -> bool {
+        if !self.start_unmapping() {
+            return false;
+        }
+        match self.flavor {
+            MemoryBlockFlavor::Dedicated => {
+                device.unmap_memory(&self.memory);
+            }
+            MemoryBlockFlavor::Linear { .. } => {}
+            MemoryBlockFlavor::Buddy { .. } => {}
+        }
+        self.end_unmapping();
+        true
     }
 
     /// Transiently maps block memory range and copies specified data
@@ -164,12 +242,10 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         data: &[u8],
     ) -> Result<(), MapError> {
-        self.assert_unmapped();
-
         let size = data.len();
-        let ptr = self.map_memory_internal(device, offset, size)?;
+        let ptr = self.map(device, offset, size)?;
 
-        copy_nonoverlapping(data.as_ptr(), ptr, size);
+        copy_nonoverlapping(data.as_ptr(), ptr.as_ptr(), size);
         let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.map_mask);
             let size = align_up(data.len() as u64, self.map_mask).unwrap();
@@ -183,7 +259,7 @@ impl<M> MemoryBlock<M> {
             Ok(())
         };
 
-        self.unmap_memory_internal(device);
+        self.unmap(device);
         result.map_err(Into::into)
     }
 
@@ -205,8 +281,6 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         data: &mut [u8],
     ) -> Result<(), MapError> {
-        self.assert_unmapped();
-
         #[cfg(feature = "tracing")]
         {
             if !self.cached() {
@@ -215,7 +289,7 @@ impl<M> MemoryBlock<M> {
         }
 
         let size = data.len();
-        let ptr = self.map_memory_internal(device, offset, size)?;
+        let ptr = self.map(device, offset, size)?;
         let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.map_mask);
             let size = align_up(data.len() as u64, self.map_mask).unwrap();
@@ -229,71 +303,41 @@ impl<M> MemoryBlock<M> {
             Ok(())
         };
         if result.is_ok() {
-            copy_nonoverlapping(ptr, data.as_mut_ptr(), size);
+            copy_nonoverlapping(ptr.as_ptr(), data.as_mut_ptr(), size);
         }
 
-        self.unmap_memory_internal(device);
+        self.unmap(device);
         result.map_err(Into::into)
     }
 
-    unsafe fn map_memory_internal(
-        &self,
-        device: &impl MemoryDevice<M>,
-        offset: u64,
-        size: usize,
-    ) -> Result<*mut u8, MapError> {
-        let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
-        let size = align_up(size_u64, self.map_mask)
-            .expect("aligned `size` doesn't fit device address space");
-
-        let aligned_offset = align_down(offset, self.map_mask);
-
-        assert!(offset < self.size, "`offset` is out of memory block bounds");
-        assert!(
-            size_u64 <= self.size - offset,
-            "`offset + size` is out of memory block bounds"
-        );
-
-        let ptr = match self.flavor {
-            MemoryBlockFlavor::Dedicated => {
-                let aligned_size = offset + size - aligned_offset;
-                let ptr =
-                    device.map_memory(&self.memory, self.offset + aligned_offset, aligned_size)?;
-
-                let offset_align_shift = offset - aligned_offset;
-                let offset_align_shift = isize::try_from(offset_align_shift)
-                    .expect("`non_coherent_atom_size` is too large");
-
-                ptr.as_ptr().offset(offset_align_shift)
-            }
-            MemoryBlockFlavor::Linear { ptr: Some(ptr), .. }
-            | MemoryBlockFlavor::Buddy { ptr: Some(ptr), .. } => {
-                let offset_isize = isize::try_from(offset)
-                    .expect("Buddy and linear block should fit host address space");
-                ptr.as_ptr().offset(offset_isize)
-            }
-            _ => return Err(MapError::NonHostVisible),
-        };
-
-        Ok(ptr)
+    fn acquire_mapping(&self) -> bool {
+        self.mapped
+            .compare_exchange(
+                MAPPING_STATE_UNMAPPED,
+                MAPPING_STATE_MAPPED,
+                Acquire,
+                Relaxed,
+            )
+            .is_ok()
     }
 
-    unsafe fn unmap_memory_internal(&self, device: &impl MemoryDevice<M>) {
-        match self.flavor {
-            MemoryBlockFlavor::Dedicated => {
-                device.unmap_memory(&self.memory);
-            }
-            MemoryBlockFlavor::Linear { .. } => {}
-            MemoryBlockFlavor::Buddy { .. } => {}
-        }
+    fn mapping_failed(&self) {
+        self.mapped.store(MAPPING_STATE_UNMAPPED, Relaxed);
     }
 
-    fn assert_mapped(&self) {
-        assert!(self.mapped, "Memory block is not mapped");
+    fn start_unmapping(&self) -> bool {
+        self.mapped
+            .compare_exchange(
+                MAPPING_STATE_MAPPED,
+                MAPPING_STATE_UNMAPPING,
+                Release,
+                Relaxed,
+            )
+            .is_ok()
     }
 
-    fn assert_unmapped(&self) {
-        assert!(!self.mapped, "Memory block is already mapped");
+    fn end_unmapping(&self) {
+        self.mapped.store(MAPPING_STATE_UNMAPPED, Relaxed);
     }
 
     fn coherent(&self) -> bool {
