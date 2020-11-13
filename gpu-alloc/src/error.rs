@@ -76,6 +76,9 @@ pub enum MapError {
     /// For Vulkan backend this includes failed attempt
     /// to allocate large enough virtual address space.
     MapFailed,
+
+    /// Mapping failed due to block being already mapped.
+    AlreadyMapped,
 }
 
 impl From<DeviceMapError> for MapError {
@@ -104,6 +107,7 @@ impl Display for MapError {
             MapError::OutOfHostMemory => fmt.write_str("Host memory exhausted"),
             MapError::MapFailed => fmt.write_str("Failed to map memory object"),
             MapError::NonHostVisible => fmt.write_str("Impossible to map non-host-visible memory"),
+            MapError::AlreadyMapped => fmt.write_str("Block is already mapped"),
         }
     }
 }

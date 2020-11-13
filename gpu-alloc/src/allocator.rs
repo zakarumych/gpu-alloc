@@ -1,6 +1,6 @@
 use {
     crate::{
-        block::{MemoryBlock, MemoryBlockFlavor, Relevant},
+        block::{MemoryBlock, MemoryBlockFlavor},
         buddy::{BuddyAllocator, BuddyBlock},
         config::Config,
         error::AllocationError,
@@ -273,17 +273,15 @@ where
                             self.allocations_remains -= 1;
                             heap.alloc(request.size);
 
-                            return Ok(MemoryBlock {
-                                memory_type: index,
-                                props: memory_type.props,
+                            return Ok(MemoryBlock::new(
                                 memory,
-                                offset: 0,
-                                size: request.size,
+                                index,
+                                memory_type.props,
+                                0,
+                                request.size,
                                 map_mask,
-                                mapped: false,
-                                flavor: MemoryBlockFlavor::Dedicated,
-                                relevant: Relevant,
-                            });
+                                MemoryBlockFlavor::Dedicated,
+                            ));
                         }
                         Err(OutOfMemory::OutOfDeviceMemory) => continue,
                         Err(OutOfMemory::OutOfHostMemory) => {
@@ -319,20 +317,18 @@ where
 
                     match result {
                         Ok(block) => {
-                            return Ok(MemoryBlock {
-                                memory_type: index,
-                                props: memory_type.props,
-                                memory: block.memory,
-                                offset: block.offset,
-                                size: block.size,
+                            return Ok(MemoryBlock::new(
+                                block.memory,
+                                index,
+                                memory_type.props,
+                                block.offset,
+                                block.size,
                                 map_mask,
-                                mapped: false,
-                                flavor: MemoryBlockFlavor::Linear {
+                                MemoryBlockFlavor::Linear {
                                     chunk: block.chunk,
                                     ptr: block.ptr,
                                 },
-                                relevant: Relevant,
-                            })
+                            ))
                         }
                         Err(AllocationError::OutOfDeviceMemory) => continue,
                         Err(err) => return Err(err),
@@ -377,21 +373,19 @@ where
 
                     match result {
                         Ok(block) => {
-                            return Ok(MemoryBlock {
-                                memory_type: index,
-                                props: memory_type.props,
-                                memory: block.memory,
-                                offset: block.offset,
-                                size: block.size,
+                            return Ok(MemoryBlock::new(
+                                block.memory,
+                                index,
+                                memory_type.props,
+                                block.offset,
+                                block.size,
                                 map_mask,
-                                mapped: false,
-                                flavor: MemoryBlockFlavor::Buddy {
+                                MemoryBlockFlavor::Buddy {
                                     chunk: block.chunk,
                                     ptr: block.ptr,
                                     index: block.index,
                                 },
-                                relevant: Relevant,
-                            })
+                            ))
                         }
                         Err(AllocationError::OutOfDeviceMemory) => continue,
                         Err(err) => return Err(err),
@@ -413,16 +407,18 @@ where
     ///   and memory blocks allocated from it
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
     pub unsafe fn dealloc(&mut self, device: &impl MemoryDevice<M>, block: MemoryBlock<M>) {
-        match block.flavor {
+        let memory_type = block.memory_type();
+        let offset = block.offset();
+        let size = block.size();
+        let (memory, flavor) = block.deallocate();
+        match flavor {
             MemoryBlockFlavor::Dedicated => {
-                let heap = self.memory_types[block.memory_type as usize].heap;
-                let block_size = block.size;
-                device.deallocate_memory(block.deallocate());
+                let heap = self.memory_types[memory_type as usize].heap;
+                device.deallocate_memory(memory);
                 self.allocations_remains += 1;
-                self.memory_heaps[heap as usize].dealloc(block_size);
+                self.memory_heaps[heap as usize].dealloc(size);
             }
             MemoryBlockFlavor::Linear { chunk, ptr } => {
-                let memory_type = block.memory_type;
                 let heap = self.memory_types[memory_type as usize].heap;
                 let heap = &mut self.memory_heaps[heap as usize];
 
@@ -433,9 +429,9 @@ where
                 allocator.dealloc(
                     device,
                     LinearBlock {
-                        offset: block.offset,
-                        size: block.size,
-                        memory: block.deallocate(),
+                        offset,
+                        size,
+                        memory,
                         ptr,
                         chunk,
                     },
@@ -444,7 +440,7 @@ where
                 );
             }
             MemoryBlockFlavor::Buddy { chunk, ptr, index } => {
-                let memory_type = block.memory_type;
+                let memory_type = memory_type;
                 let heap = self.memory_types[memory_type as usize].heap;
                 let heap = &mut self.memory_heaps[heap as usize];
 
@@ -455,9 +451,9 @@ where
                 allocator.dealloc(
                     device,
                     BuddyBlock {
-                        offset: block.offset,
-                        size: block.size,
-                        memory: block.deallocate(),
+                        offset,
+                        size,
+                        memory,
                         index,
                         ptr,
                         chunk,
