@@ -257,7 +257,7 @@ where
 
             match strategy {
                 Strategy::Dedicated => {
-                    if !heap.budget() >= request.size {
+                    if heap.budget() < request.size {
                         continue;
                     }
 
