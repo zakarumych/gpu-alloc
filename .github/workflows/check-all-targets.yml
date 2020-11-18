@@ -1,6 +1,11 @@
 name: Check all targets
 
-on: {}
+on:
+  push:
+    branches: [ master ]
+    paths: 
+      - '**.rs'
+      - '**/Cargo.toml'
 
 env:
   CARGO_TERM_COLOR: always
