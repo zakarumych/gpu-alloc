@@ -3,10 +3,6 @@ name: Generated readme check
 on:
   push:
     branches: [ master ]
-    paths: 
-      - 'README.md'
-      - 'README.tpl'
-      - 'gpu-alloc/src/lib.rs'
   pull_request:
     types: [ opened, edited ]
     branches: [ master ]
