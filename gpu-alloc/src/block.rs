@@ -149,8 +149,7 @@ impl<M> MemoryBlock<M> {
         offset: u64,
         size: usize,
     ) -> Result<NonNull<u8>, MapError> {
-        let size_u64 = u64::try_from(size)
-            .expect("`size` doesn't fit device address space");
+        let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
         let size = align_up(size_u64, self.map_mask)
             .expect("aligned `size` doesn't fit device address space");
 
@@ -172,11 +171,8 @@ impl<M> MemoryBlock<M> {
                     return Err(MapError::AlreadyMapped);
                 }
                 let aligned_size = offset + size - aligned_offset;
-                let result = device.map_memory(
-                    &self.memory,
-                    self.offset + aligned_offset,
-                    aligned_size,
-                );
+                let result =
+                    device.map_memory(&self.memory, self.offset + aligned_offset, aligned_size);
 
                 match result {
                     Ok(ptr) => ptr.as_ptr().offset(offset_align_shift),
@@ -192,9 +188,8 @@ impl<M> MemoryBlock<M> {
                     return Err(MapError::AlreadyMapped);
                 }
 
-                let offset_isize = isize::try_from(offset).expect(
-                    "Buddy and linear block should fit host address space",
-                );
+                let offset_isize = isize::try_from(offset)
+                    .expect("Buddy and linear block should fit host address space");
                 ptr.as_ptr().offset(offset_isize)
             }
             _ => return Err(MapError::NonHostVisible),
