@@ -1,0 +1,36 @@
+name: Check
+
+on:
+  push:
+    branches: [ master ]
+    paths: 
+      - '**.rs'
+      - '**/Cargo.toml'
+  pull_request:
+    types: [ opened, edited ]
+    branches: [ master ]
+    paths: 
+      - '**.rs'
+      - '**/Cargo.toml'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust-toolchain: [stable, nightly, '1.46.0']
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install ${{ matrix.rust-toolchain }} toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.rust-toolchain }}
+    - name: Run cargo test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all --all-features
