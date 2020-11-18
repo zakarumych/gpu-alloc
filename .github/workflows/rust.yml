@@ -30,7 +30,6 @@ jobs:
       with:
         profile: minimal
         toolchain: ${{ matrix.rust-toolchain }}
-        override: true
     - if: ${{ matrix.os != 'macOS-latest' && matrix.rust-toolchain != '1.40.0' }}
       name: Run cargo test
       uses: actions-rs/cargo@v1
@@ -66,32 +65,8 @@ jobs:
         profile: minimal
         toolchain: stable
         target: ${{ matrix.target }}
-        override: true
     - name: Run cargo check
       uses: actions-rs/cargo@v1
       with:
         command: check
         args: --all --all-features
-
-  lints:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Install nightly toolchain with clippy available
-      uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: nightly
-        override: true
-        components: rustfmt, clippy
-    - name: Run cargo fmt
-      uses: actions-rs/cargo@v1
-      with:
-        command: fmt
-        args: --all -- --check
-
-    - name: Run cargo clippy
-      uses: actions-rs/clippy-check@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        args: --all --all-features -- -D warnings
