@@ -6,7 +6,7 @@ edition = "2018"
 description = "`erupt` backend for `gfx-alloc`"
 keywords = ["gpu", "vulkan", "allocation", "no-std"]
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/gpu-alloc-types/0.1.0"
+documentation = "https://docs.rs/gpu-alloc-erupt/0.1.1"
 homepage = "https://github.com/zakarumych/gpu-alloc"
 repository = "https://github.com/zakarumych/gpu-alloc"
 
