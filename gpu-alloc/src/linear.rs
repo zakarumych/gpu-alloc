@@ -104,7 +104,7 @@ where
         let host_visible = self.host_visible();
 
         match &mut self.ready {
-            Some(ready) if fits(self.chunk_size, ready.allocated, size, align_mask) => {
+            Some(ready) if fits(self.chunk_size, ready.offset, size, align_mask) => {
                 let chunks_offset = self.offset;
                 let exhausted = self.exhausted.len() as u64;
                 Ok(Self::alloc_from_chunk(
@@ -260,7 +260,7 @@ where
         M: Clone,
     {
         debug_assert!(
-            fits(chunk_size, chunk.allocated, size, align_mask),
+            fits(chunk_size, chunk.offset, size, align_mask),
             "Must be checked in caller"
         );
 
@@ -288,8 +288,8 @@ where
     }
 }
 
-fn fits(chunk_size: u64, chunk_allocated: u64, size: u64, align_mask: u64) -> bool {
-    align_up(chunk_allocated, align_mask)
+fn fits(chunk_size: u64, chunk_offset: u64, size: u64, align_mask: u64) -> bool {
+    align_up(chunk_offset, align_mask)
         .and_then(|aligned| aligned.checked_add(size))
         .map_or(false, |end| end <= chunk_size)
 }
