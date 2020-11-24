@@ -40,7 +40,7 @@ pub struct MemoryBlock<M> {
     props: MemoryPropertyFlags,
     offset: u64,
     size: u64,
-    map_mask: u64,
+    atom_mask: u64,
     mapped: AtomicU8,
     flavor: MemoryBlockFlavor,
     relevant: Relevant,
@@ -53,7 +53,7 @@ impl<M> MemoryBlock<M> {
         props: MemoryPropertyFlags,
         offset: u64,
         size: u64,
-        map_mask: u64,
+        atom_mask: u64,
         flavor: MemoryBlockFlavor,
     ) -> Self {
         MemoryBlock {
@@ -62,7 +62,7 @@ impl<M> MemoryBlock<M> {
             props,
             offset,
             size,
-            map_mask,
+            atom_mask,
             flavor,
             mapped: AtomicU8::new(MAPPING_STATE_UNMAPPED),
             relevant: Relevant,
@@ -150,10 +150,10 @@ impl<M> MemoryBlock<M> {
         size: usize,
     ) -> Result<NonNull<u8>, MapError> {
         let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
-        let size = align_up(size_u64, self.map_mask)
+        let size = align_up(size_u64, self.atom_mask)
             .expect("aligned `size` doesn't fit device address space");
 
-        let aligned_offset = align_down(offset, self.map_mask);
+        let aligned_offset = align_down(offset, self.atom_mask);
 
         assert!(offset < self.size, "`offset` is out of memory block bounds");
         assert!(
@@ -247,8 +247,8 @@ impl<M> MemoryBlock<M> {
 
         copy_nonoverlapping(data.as_ptr(), ptr.as_ptr(), size);
         let result = if !self.coherent() {
-            let aligned_offset = align_down(offset, self.map_mask);
-            let size = align_up(data.len() as u64, self.map_mask).unwrap();
+            let aligned_offset = align_down(offset, self.atom_mask);
+            let size = align_up(data.len() as u64, self.atom_mask).unwrap();
 
             device.flush_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,
@@ -291,8 +291,8 @@ impl<M> MemoryBlock<M> {
         let size = data.len();
         let ptr = self.map(device, offset, size)?;
         let result = if !self.coherent() {
-            let aligned_offset = align_down(offset, self.map_mask);
-            let size = align_up(data.len() as u64, self.map_mask).unwrap();
+            let aligned_offset = align_down(offset, self.atom_mask);
+            let size = align_up(data.len() as u64, self.atom_mask).unwrap();
 
             device.invalidate_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,

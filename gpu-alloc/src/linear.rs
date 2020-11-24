@@ -1,5 +1,5 @@
 use {
-    crate::{align_up, error::AllocationError, heap::Heap, MemoryBounds},
+    crate::{align_down, align_up, error::AllocationError, heap::Heap, MemoryBounds},
     alloc::collections::VecDeque,
     core::{convert::TryFrom as _, ptr::NonNull},
     gpu_alloc_types::{AllocationFlags, DeviceMapError, MemoryDevice, MemoryPropertyFlags},
@@ -66,6 +66,8 @@ where
         props: MemoryPropertyFlags,
         atom_mask: u64,
     ) -> Self {
+        debug_assert_eq!(align_down(chunk_size, atom_mask), chunk_size);
+
         LinearAllocator {
             ready: None,
             exhausted: VecDeque::new(),
@@ -94,6 +96,9 @@ where
             self.chunk_size >= size,
             "GpuAllocator must not request allocations equal or greater to chunks size"
         );
+
+        let size = align_up(size, self.atom_mask)
+            .expect("Any value not greater than aligned chunk size must fit for alignment");
 
         let align_mask = align_mask | self.atom_mask;
         let host_visible = self.host_visible();
@@ -264,6 +269,13 @@ where
 
         chunk.offset = offset + size;
         chunk.allocated += 1;
+
+        debug_assert!(
+            offset
+                .checked_add(size)
+                .map_or(false, |end| end <= chunk_size),
+            "Offset + size is not in chunk bounds"
+        );
         LinearBlock {
             memory: chunk.memory.clone(),
             ptr: chunk
@@ -279,7 +291,7 @@ where
 fn fits(chunk_size: u64, chunk_allocated: u64, size: u64, align_mask: u64) -> bool {
     align_up(chunk_allocated, align_mask)
         .and_then(|aligned| aligned.checked_add(size))
-        .map_or(false, |size| size < chunk_size)
+        .map_or(false, |end| end <= chunk_size)
 }
 
 fn min<L, R>(l: L, r: R) -> L

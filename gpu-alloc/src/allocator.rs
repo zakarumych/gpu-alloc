@@ -1,5 +1,6 @@
 use {
     crate::{
+        align_down,
         block::{MemoryBlock, MemoryBlockFlavor},
         buddy::{BuddyAllocator, BuddyBlock},
         config::Config,
@@ -214,7 +215,7 @@ where
             let heap = memory_type.heap;
             let heap = &mut self.memory_heaps[heap as usize];
 
-            let map_mask = if host_visible_non_coherent(memory_type.props) {
+            let atom_mask = if host_visible_non_coherent(memory_type.props) {
                 self.non_coherent_atom_mask
             } else {
                 0
@@ -226,7 +227,7 @@ where
                 AllocationFlags::empty()
             };
 
-            let linear_chunk = self.linear_chunk.min(heap.size() / 32);
+            let linear_chunk = align_down(self.linear_chunk.min(heap.size() / 32), atom_mask);
 
             let strategy = match (dedicated, transient) {
                 (Some(Dedicated::Required), _) => Strategy::Dedicated,
@@ -279,7 +280,7 @@ where
                                 memory_type.props,
                                 0,
                                 request.size,
-                                map_mask,
+                                atom_mask,
                                 MemoryBlockFlavor::Dedicated,
                             ));
                         }
@@ -323,7 +324,7 @@ where
                                 memory_type.props,
                                 block.offset,
                                 block.size,
-                                map_mask,
+                                atom_mask,
                                 MemoryBlockFlavor::Linear {
                                     chunk: block.chunk,
                                     ptr: block.ptr,
@@ -379,7 +380,7 @@ where
                                 memory_type.props,
                                 block.offset,
                                 block.size,
-                                map_mask,
+                                atom_mask,
                                 MemoryBlockFlavor::Buddy {
                                     chunk: block.chunk,
                                     ptr: block.ptr,

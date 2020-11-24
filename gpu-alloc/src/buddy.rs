@@ -402,13 +402,21 @@ where
 
         let chunk_entry = self.chunks.get_unchecked(entry.chunk);
 
+        debug_assert!(
+            entry
+                .offset
+                .checked_add(size)
+                .map_or(false, |end| end <= chunk_entry.size),
+            "Offset + size is not in chunk bounds"
+        );
+
         Ok(BuddyBlock {
             memory: chunk_entry.memory.clone(),
             ptr: chunk_entry
                 .ptr
                 .map(|ptr| NonNull::new_unchecked(ptr.as_ptr().add(entry.offset as usize))),
-            size,
             offset: entry.offset,
+            size,
             chunk: entry.chunk,
             index: entry.index,
         })
