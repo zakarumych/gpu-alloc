@@ -209,6 +209,7 @@ where
 
                     if chunk.allocated == 0 {
                         let memory = self.exhausted[chunk_offset].take().unwrap().memory;
+                        drop(block);
                         device.deallocate_memory(memory);
                         *allocations_remains += 1;
                         heap.dealloc(self.chunk_size);
