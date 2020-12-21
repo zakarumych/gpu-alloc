@@ -252,7 +252,7 @@ impl<M> MemoryBlock<M> {
 
             device.flush_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,
-                offset: aligned_offset,
+                offset: self.offset + aligned_offset,
                 size,
             }])
         } else {
@@ -296,7 +296,7 @@ impl<M> MemoryBlock<M> {
 
             device.invalidate_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,
-                offset: aligned_offset,
+                offset: self.offset + aligned_offset,
                 size,
             }])
         } else {
