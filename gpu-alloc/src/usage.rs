@@ -149,7 +149,7 @@ fn priority(usage: UsageFlags, flags: MemoryPropertyFlags) -> u32 {
 
     assert!(
         flags.contains(Flags::HOST_VISIBLE)
-            && !usage
+            || !usage
                 .intersects(UsageFlags::HOST_ACCESS | UsageFlags::UPLOAD | UsageFlags::DOWNLOAD)
     );
 
