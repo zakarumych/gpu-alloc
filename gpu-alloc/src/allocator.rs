@@ -258,10 +258,6 @@ where
 
             match strategy {
                 Strategy::Dedicated => {
-                    if heap.budget() < request.size {
-                        continue;
-                    }
-
                     #[cfg(feature = "tracing")]
                     tracing::debug!(
                         "Allocating memory object `{}@{:?}`",
