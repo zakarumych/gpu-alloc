@@ -56,7 +56,7 @@ impl<M> MemoryBlock<M> {
         atom_mask: u64,
         flavor: MemoryBlockFlavor,
     ) -> Self {
-        assert!(atom_mask <= i32::MAX as u64, "`atom_mask` is too large");
+        isize::try_from(atom_mask).expect("`atom_mask` is too large");
         MemoryBlock {
             memory,
             memory_type,
@@ -249,12 +249,12 @@ impl<M> MemoryBlock<M> {
         copy_nonoverlapping(data.as_ptr(), ptr.as_ptr(), size);
         let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.atom_mask);
-            let size = align_up(data.len() as u64, self.atom_mask).unwrap();
+            let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
             device.flush_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,
                 offset: self.offset + aligned_offset,
-                size,
+                size: end - aligned_offset,
             }])
         } else {
             Ok(())
@@ -293,12 +293,12 @@ impl<M> MemoryBlock<M> {
         let ptr = self.map(device, offset, size)?;
         let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.atom_mask);
-            let size = align_up(data.len() as u64, self.atom_mask).unwrap();
+            let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
             device.invalidate_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,
                 offset: self.offset + aligned_offset,
-                size,
+                size: end - aligned_offset,
             }])
         } else {
             Ok(())
