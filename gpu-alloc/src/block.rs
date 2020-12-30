@@ -56,6 +56,7 @@ impl<M> MemoryBlock<M> {
         atom_mask: u64,
         flavor: MemoryBlockFlavor,
     ) -> Self {
+        isize::try_from(atom_mask).expect("`atom_mask` is too large");
         MemoryBlock {
             memory,
             memory_type,
@@ -150,11 +151,6 @@ impl<M> MemoryBlock<M> {
         size: usize,
     ) -> Result<NonNull<u8>, MapError> {
         let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
-        let size = align_up(size_u64, self.atom_mask)
-            .expect("aligned `size` doesn't fit device address space");
-
-        let aligned_offset = align_down(offset, self.atom_mask);
-
         assert!(offset < self.size, "`offset` is out of memory block bounds");
         assert!(
             size_u64 <= self.size - offset,
@@ -163,19 +159,25 @@ impl<M> MemoryBlock<M> {
 
         let ptr = match self.flavor {
             MemoryBlockFlavor::Dedicated => {
-                let offset_align_shift = offset - aligned_offset;
-                let offset_align_shift = isize::try_from(offset_align_shift)
-                    .expect("`non_coherent_atom_size` is too large");
+                let end = align_up(offset + size_u64, self.atom_mask)
+                    .expect("mapping end doesn't fit device address space");
+                let aligned_offset = align_down(offset, self.atom_mask);
 
                 if !self.acquire_mapping() {
                     return Err(MapError::AlreadyMapped);
                 }
-                let aligned_size = offset + size - aligned_offset;
-                let result =
-                    device.map_memory(&self.memory, self.offset + aligned_offset, aligned_size);
+                let result = device.map_memory(
+                    &self.memory,
+                    self.offset + aligned_offset,
+                    end - aligned_offset,
+                );
 
                 match result {
-                    Ok(ptr) => ptr.as_ptr().offset(offset_align_shift),
+                    // the overflow is checked in `Self::new()`
+                    Ok(ptr) => {
+                        let ptr_offset = (offset - aligned_offset) as isize;
+                        ptr.as_ptr().offset(ptr_offset)
+                    }
                     Err(err) => {
                         self.mapping_failed();
                         return Err(err.into());
@@ -187,7 +189,6 @@ impl<M> MemoryBlock<M> {
                 if !self.acquire_mapping() {
                     return Err(MapError::AlreadyMapped);
                 }
-
                 let offset_isize = isize::try_from(offset)
                     .expect("Buddy and linear block should fit host address space");
                 ptr.as_ptr().offset(offset_isize)
@@ -248,12 +249,12 @@ impl<M> MemoryBlock<M> {
         copy_nonoverlapping(data.as_ptr(), ptr.as_ptr(), size);
         let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.atom_mask);
-            let size = align_up(data.len() as u64, self.atom_mask).unwrap();
+            let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
             device.flush_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,
                 offset: self.offset + aligned_offset,
-                size,
+                size: end - aligned_offset,
             }])
         } else {
             Ok(())
@@ -292,12 +293,12 @@ impl<M> MemoryBlock<M> {
         let ptr = self.map(device, offset, size)?;
         let result = if !self.coherent() {
             let aligned_offset = align_down(offset, self.atom_mask);
-            let size = align_up(data.len() as u64, self.atom_mask).unwrap();
+            let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
             device.invalidate_memory_ranges(&[MappedMemoryRange {
                 memory: &self.memory,
                 offset: self.offset + aligned_offset,
-                size,
+                size: end - aligned_offset,
             }])
         } else {
             Ok(())
