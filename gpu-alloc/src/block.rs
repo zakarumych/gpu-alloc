@@ -29,8 +29,9 @@ impl Drop for Relevant {
 }
 
 const MAPPING_STATE_UNMAPPED: u8 = 0;
-const MAPPING_STATE_MAPPED: u8 = 1;
-const MAPPING_STATE_UNMAPPING: u8 = 2;
+const MAPPING_STATE_MAPPING: u8 = 1;
+const MAPPING_STATE_MAPPED: u8 = 2;
+const MAPPING_STATE_UNMAPPING: u8 = 3;
 
 /// Memory block allocated by `GpuAllocator`.
 #[derive(Debug)]
@@ -163,7 +164,7 @@ impl<M> MemoryBlock<M> {
                     .expect("mapping end doesn't fit device address space");
                 let aligned_offset = align_down(offset, self.atom_mask);
 
-                if !self.acquire_mapping() {
+                if !self.start_mapping() {
                     return Err(MapError::AlreadyMapped);
                 }
                 let result = device.map_memory(
@@ -175,6 +176,7 @@ impl<M> MemoryBlock<M> {
                 match result {
                     // the overflow is checked in `Self::new()`
                     Ok(ptr) => {
+                        self.end_mapping();
                         let ptr_offset = (offset - aligned_offset) as isize;
                         ptr.as_ptr().offset(ptr_offset)
                     }
@@ -322,8 +324,25 @@ impl<M> MemoryBlock<M> {
             .is_ok()
     }
 
+    fn start_mapping(&self) -> bool {
+        self.mapped
+            .compare_exchange(
+                MAPPING_STATE_UNMAPPED,
+                MAPPING_STATE_MAPPING,
+                Acquire,
+                Relaxed,
+            )
+            .is_ok()
+    }
+
+    fn end_mapping(&self) {
+        debug_assert_eq!(self.mapped.load(Relaxed), MAPPING_STATE_MAPPING);
+        self.mapped.store(MAPPING_STATE_MAPPED, Release);
+    }
+
     fn mapping_failed(&self) {
-        self.mapped.store(MAPPING_STATE_UNMAPPED, Relaxed);
+        debug_assert_eq!(self.mapped.load(Relaxed), MAPPING_STATE_MAPPING);
+        self.mapped.store(MAPPING_STATE_UNMAPPED, Release);
     }
 
     fn start_unmapping(&self) -> bool {
@@ -331,14 +350,15 @@ impl<M> MemoryBlock<M> {
             .compare_exchange(
                 MAPPING_STATE_MAPPED,
                 MAPPING_STATE_UNMAPPING,
-                Release,
+                Acquire,
                 Relaxed,
             )
             .is_ok()
     }
 
     fn end_unmapping(&self) {
-        self.mapped.store(MAPPING_STATE_UNMAPPED, Relaxed);
+        debug_assert_eq!(self.mapped.load(Relaxed), MAPPING_STATE_UNMAPPING);
+        self.mapped.store(MAPPING_STATE_UNMAPPED, Release);
     }
 
     fn coherent(&self) -> bool {
