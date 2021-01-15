@@ -1,9 +1,10 @@
 use {
     crate::{align_down, align_up, error::MapError},
+    alloc::sync::Arc,
     core::{
         convert::TryFrom as _,
         ptr::{copy_nonoverlapping, NonNull},
-        sync::atomic::{AtomicU8, Ordering::*},
+        // sync::atomic::{AtomicU8, Ordering::*},
     },
     gpu_alloc_types::{MappedMemoryRange, MemoryDevice, MemoryPropertyFlags},
 };
@@ -28,52 +29,44 @@ impl Drop for Relevant {
     }
 }
 
-const MAPPING_STATE_UNMAPPED: u8 = 0;
-const MAPPING_STATE_MAPPING: u8 = 1;
-const MAPPING_STATE_MAPPED: u8 = 2;
-const MAPPING_STATE_UNMAPPING: u8 = 3;
-
 /// Memory block allocated by `GpuAllocator`.
 #[derive(Debug)]
 pub struct MemoryBlock<M> {
-    memory: M,
     memory_type: u32,
     props: MemoryPropertyFlags,
     offset: u64,
     size: u64,
     atom_mask: u64,
-    mapped: AtomicU8,
-    flavor: MemoryBlockFlavor,
+    mapped: bool,
+    flavor: MemoryBlockFlavor<M>,
     relevant: Relevant,
 }
 
 impl<M> MemoryBlock<M> {
     pub(crate) fn new(
-        memory: M,
         memory_type: u32,
         props: MemoryPropertyFlags,
         offset: u64,
         size: u64,
         atom_mask: u64,
-        flavor: MemoryBlockFlavor,
+        flavor: MemoryBlockFlavor<M>,
     ) -> Self {
         isize::try_from(atom_mask).expect("`atom_mask` is too large");
         MemoryBlock {
-            memory,
             memory_type,
             props,
             offset,
             size,
             atom_mask,
             flavor,
-            mapped: AtomicU8::new(MAPPING_STATE_UNMAPPED),
+            mapped: false,
             relevant: Relevant,
         }
     }
 
-    pub(crate) fn deallocate(self) -> (M, MemoryBlockFlavor) {
+    pub(crate) fn deallocate(self) -> MemoryBlockFlavor<M> {
         core::mem::forget(self.relevant);
-        (self.memory, self.flavor)
+        self.flavor
     }
 }
 
@@ -81,16 +74,20 @@ unsafe impl<M> Sync for MemoryBlock<M> where M: Sync {}
 unsafe impl<M> Send for MemoryBlock<M> where M: Send {}
 
 #[derive(Debug)]
-pub(crate) enum MemoryBlockFlavor {
-    Dedicated,
+pub(crate) enum MemoryBlockFlavor<M> {
+    Dedicated {
+        memory: M,
+    },
     Linear {
         chunk: u64,
         ptr: Option<NonNull<u8>>,
+        memory: Arc<M>,
     },
     Buddy {
         chunk: usize,
         index: usize,
         ptr: Option<NonNull<u8>>,
+        memory: Arc<M>,
     },
 }
 
@@ -98,7 +95,11 @@ impl<M> MemoryBlock<M> {
     /// Returns reference to parent memory object.
     #[inline(always)]
     pub fn memory(&self) -> &M {
-        &self.memory
+        match &self.flavor {
+            MemoryBlockFlavor::Dedicated { memory } => memory,
+            MemoryBlockFlavor::Buddy { memory, .. } => &**memory,
+            MemoryBlockFlavor::Linear { memory, .. } => &**memory,
+        }
     }
 
     /// Returns offset in bytes from start of memory object to start of this block.
@@ -146,7 +147,7 @@ impl<M> MemoryBlock<M> {
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
     pub unsafe fn map(
-        &self,
+        &mut self,
         device: &impl MemoryDevice<M>,
         offset: u64,
         size: usize,
@@ -158,37 +159,33 @@ impl<M> MemoryBlock<M> {
             "`offset + size` is out of memory block bounds"
         );
 
-        let ptr = match self.flavor {
-            MemoryBlockFlavor::Dedicated => {
+        let ptr = match &mut self.flavor {
+            MemoryBlockFlavor::Dedicated { memory } => {
                 let end = align_up(offset + size_u64, self.atom_mask)
                     .expect("mapping end doesn't fit device address space");
                 let aligned_offset = align_down(offset, self.atom_mask);
 
-                if !self.start_mapping() {
+                if !acquire_mapping(&mut self.mapped) {
                     return Err(MapError::AlreadyMapped);
                 }
-                let result = device.map_memory(
-                    &self.memory,
-                    self.offset + aligned_offset,
-                    end - aligned_offset,
-                );
+                let result =
+                    device.map_memory(memory, self.offset + aligned_offset, end - aligned_offset);
 
                 match result {
                     // the overflow is checked in `Self::new()`
                     Ok(ptr) => {
-                        self.end_mapping();
                         let ptr_offset = (offset - aligned_offset) as isize;
                         ptr.as_ptr().offset(ptr_offset)
                     }
                     Err(err) => {
-                        self.mapping_failed();
+                        release_mapping(&mut self.mapped);
                         return Err(err.into());
                     }
                 }
             }
             MemoryBlockFlavor::Linear { ptr: Some(ptr), .. }
             | MemoryBlockFlavor::Buddy { ptr: Some(ptr), .. } => {
-                if !self.acquire_mapping() {
+                if !acquire_mapping(&mut self.mapped) {
                     return Err(MapError::AlreadyMapped);
                 }
                 let offset_isize = isize::try_from(offset)
@@ -212,18 +209,17 @@ impl<M> MemoryBlock<M> {
     ///
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
-    pub unsafe fn unmap(&self, device: &impl MemoryDevice<M>) -> bool {
-        if !self.start_unmapping() {
+    pub unsafe fn unmap(&mut self, device: &impl MemoryDevice<M>) -> bool {
+        if !release_mapping(&mut self.mapped) {
             return false;
         }
-        match self.flavor {
-            MemoryBlockFlavor::Dedicated => {
-                device.unmap_memory(&self.memory);
+        match &mut self.flavor {
+            MemoryBlockFlavor::Dedicated { memory } => {
+                device.unmap_memory(memory);
             }
             MemoryBlockFlavor::Linear { .. } => {}
             MemoryBlockFlavor::Buddy { .. } => {}
         }
-        self.end_unmapping();
         true
     }
 
@@ -240,7 +236,7 @@ impl<M> MemoryBlock<M> {
     /// The caller must guarantee that any previously submitted command that reads or writes to this range has completed.
     #[inline(always)]
     pub unsafe fn write_bytes(
-        &self,
+        &mut self,
         device: &impl MemoryDevice<M>,
         offset: u64,
         data: &[u8],
@@ -254,7 +250,7 @@ impl<M> MemoryBlock<M> {
             let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
             device.flush_memory_ranges(&[MappedMemoryRange {
-                memory: &self.memory,
+                memory: self.memory(),
                 offset: self.offset + aligned_offset,
                 size: end - aligned_offset,
             }])
@@ -279,7 +275,7 @@ impl<M> MemoryBlock<M> {
     /// The caller must guarantee that any previously submitted command that reads to this range has completed.
     #[inline(always)]
     pub unsafe fn read_bytes(
-        &self,
+        &mut self,
         device: &impl MemoryDevice<M>,
         offset: u64,
         data: &mut [u8],
@@ -298,7 +294,7 @@ impl<M> MemoryBlock<M> {
             let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
             device.invalidate_memory_ranges(&[MappedMemoryRange {
-                memory: &self.memory,
+                memory: self.memory(),
                 offset: self.offset + aligned_offset,
                 size: end - aligned_offset,
             }])
@@ -313,54 +309,6 @@ impl<M> MemoryBlock<M> {
         result.map_err(Into::into)
     }
 
-    fn acquire_mapping(&self) -> bool {
-        self.mapped
-            .compare_exchange(
-                MAPPING_STATE_UNMAPPED,
-                MAPPING_STATE_MAPPED,
-                Acquire,
-                Relaxed,
-            )
-            .is_ok()
-    }
-
-    fn start_mapping(&self) -> bool {
-        self.mapped
-            .compare_exchange(
-                MAPPING_STATE_UNMAPPED,
-                MAPPING_STATE_MAPPING,
-                Acquire,
-                Relaxed,
-            )
-            .is_ok()
-    }
-
-    fn end_mapping(&self) {
-        debug_assert_eq!(self.mapped.load(Relaxed), MAPPING_STATE_MAPPING);
-        self.mapped.store(MAPPING_STATE_MAPPED, Release);
-    }
-
-    fn mapping_failed(&self) {
-        debug_assert_eq!(self.mapped.load(Relaxed), MAPPING_STATE_MAPPING);
-        self.mapped.store(MAPPING_STATE_UNMAPPED, Release);
-    }
-
-    fn start_unmapping(&self) -> bool {
-        self.mapped
-            .compare_exchange(
-                MAPPING_STATE_MAPPED,
-                MAPPING_STATE_UNMAPPING,
-                Acquire,
-                Relaxed,
-            )
-            .is_ok()
-    }
-
-    fn end_unmapping(&self) {
-        debug_assert_eq!(self.mapped.load(Relaxed), MAPPING_STATE_UNMAPPING);
-        self.mapped.store(MAPPING_STATE_UNMAPPED, Release);
-    }
-
     fn coherent(&self) -> bool {
         self.props.contains(MemoryPropertyFlags::HOST_COHERENT)
     }
@@ -368,5 +316,23 @@ impl<M> MemoryBlock<M> {
     #[cfg(feature = "tracing")]
     fn cached(&self) -> bool {
         self.props.contains(MemoryPropertyFlags::HOST_CACHED)
+    }
+}
+
+fn acquire_mapping(mapped: &mut bool) -> bool {
+    if *mapped {
+        false
+    } else {
+        *mapped = true;
+        true
+    }
+}
+
+fn release_mapping(mapped: &mut bool) -> bool {
+    if *mapped {
+        *mapped = false;
+        true
+    } else {
+        false
     }
 }

@@ -143,7 +143,7 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     unsafe fn map_memory(
         &self,
-        memory: &vk1_0::DeviceMemory,
+        memory: &mut vk1_0::DeviceMemory,
         offset: u64,
         size: u64,
     ) -> Result<NonNull<u8>, DeviceMapError> {
@@ -168,7 +168,7 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
-    unsafe fn unmap_memory(&self, memory: &vk1_0::DeviceMemory) {
+    unsafe fn unmap_memory(&self, memory: &mut vk1_0::DeviceMemory) {
         self.device.unmap_memory(*memory);
     }
 

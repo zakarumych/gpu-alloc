@@ -123,7 +123,7 @@ impl MemoryDevice<usize> for MockMemoryDevice {
     #[tracing::instrument(skip(self))]
     unsafe fn map_memory(
         &self,
-        memory: &usize,
+        memory: &mut usize,
         offset: u64,
         size: u64,
     ) -> Result<NonNull<u8>, DeviceMapError> {
@@ -163,7 +163,7 @@ impl MemoryDevice<usize> for MockMemoryDevice {
         Ok(NonNull::from(&mut (&mut *mapping.content.get())[0]))
     }
 
-    unsafe fn unmap_memory(&self, memory: &usize) {
+    unsafe fn unmap_memory(&self, memory: &mut usize) {
         let mut allocations = self.allocations.borrow_mut();
         let memory = allocations
             .get_mut(*memory)
