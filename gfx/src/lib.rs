@@ -102,7 +102,7 @@ use {
         AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
         MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
     },
-    std::{convert::TryFrom as _, ptr::NonNull, sync::Arc},
+    std::{convert::TryFrom as _, ptr::NonNull},
 };
 
 #[repr(transparent)]
@@ -127,7 +127,7 @@ where
     }
 }
 
-impl<B> MemoryDevice<Arc<B::Memory>> for GfxMemoryDevice<B>
+impl<B> MemoryDevice<B::Memory> for GfxMemoryDevice<B>
 where
     B: Backend,
 {
@@ -137,14 +137,14 @@ where
         size: u64,
         memory_type: u32,
         flags: AllocationFlags,
-    ) -> Result<Arc<B::Memory>, OutOfMemory> {
+    ) -> Result<B::Memory, OutOfMemory> {
         debug_assert!(flags.is_empty(), "No allocation flags supported");
 
         let memory_type =
             MemoryTypeId(usize::try_from(memory_type).expect("memory_type out of bound"));
 
         match self.device.allocate_memory(memory_type, size) {
-            Ok(memory) => Ok(Arc::new(memory)),
+            Ok(memory) => Ok(memory),
             Err(AllocationError::OutOfMemory(GfxOutOfMemory::Device)) => {
                 Err(OutOfMemory::OutOfDeviceMemory)
             }
@@ -156,15 +156,14 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
-    unsafe fn deallocate_memory(&self, memory: Arc<B::Memory>) {
-        let memory = Arc::try_unwrap(memory).expect("Memory must not be used anywhere");
+    unsafe fn deallocate_memory(&self, memory: B::Memory) {
         self.device.free_memory(memory);
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     unsafe fn map_memory(
         &self,
-        memory: &Arc<B::Memory>,
+        memory: &mut B::Memory,
         offset: u64,
         size: u64,
     ) -> Result<NonNull<u8>, DeviceMapError> {
@@ -191,19 +190,19 @@ where
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
-    unsafe fn unmap_memory(&self, memory: &Arc<B::Memory>) {
+    unsafe fn unmap_memory(&self, memory: &mut B::Memory) {
         self.device.unmap_memory(memory);
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     unsafe fn invalidate_memory_ranges(
         &self,
-        ranges: &[MappedMemoryRange<'_, Arc<B::Memory>>],
+        ranges: &[MappedMemoryRange<'_, B::Memory>],
     ) -> Result<(), OutOfMemory> {
         self.device
             .invalidate_mapped_memory_ranges(ranges.iter().map(|range| {
                 (
-                    &**range.memory,
+                    &*range.memory,
                     Segment {
                         offset: range.offset,
                         size: Some(range.size),
@@ -219,12 +218,12 @@ where
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     unsafe fn flush_memory_ranges(
         &self,
-        ranges: &[MappedMemoryRange<'_, Arc<B::Memory>>],
+        ranges: &[MappedMemoryRange<'_, B::Memory>],
     ) -> Result<(), OutOfMemory> {
         self.device
             .flush_mapped_memory_ranges(ranges.iter().map(|range| {
                 (
-                    &**range.memory,
+                    &*range.memory,
                     Segment {
                         offset: range.offset,
                         size: Some(range.size),

@@ -26,7 +26,7 @@ fn main() -> eyre::Result<()> {
 
     let mut allocator = GpuAllocator::new(config, device.props());
 
-    let block = unsafe {
+    let mut block = unsafe {
         allocator.alloc(
             &device,
             Request {
