@@ -1,7 +1,7 @@
 use {
     crate::{
         align_up, error::AllocationError, heap::Heap, slab::Slab, unreachable_unchecked,
-        MemoryBounds,
+        util::try_arc_unwrap, MemoryBounds,
     },
     alloc::{sync::Arc, vec::Vec},
     core::{convert::TryFrom as _, mem::replace, ptr::NonNull},
@@ -450,7 +450,7 @@ where
                     let chunk = self.chunks.remove(chunk);
                     drop(block);
 
-                    let memory = Arc::try_unwrap(chunk.memory)
+                    let memory = try_arc_unwrap(chunk.memory)
                         .expect("Memory shared after last block deallocated");
 
                     device.deallocate_memory(memory);

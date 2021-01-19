@@ -1,5 +1,11 @@
 use {
-    crate::{align_down, align_up, error::AllocationError, heap::Heap, MemoryBounds},
+    crate::{
+        align_down, align_up,
+        error::AllocationError,
+        heap::Heap,
+        util::{arc_unwrap, is_arc_unique},
+        MemoryBounds,
+    },
     alloc::{collections::VecDeque, sync::Arc},
     core::{convert::TryFrom as _, ptr::NonNull},
     gpu_alloc_types::{AllocationFlags, DeviceMapError, MemoryDevice, MemoryPropertyFlags},
@@ -194,7 +200,7 @@ where
                     );
                     drop(block);
 
-                    if is_unique(&mut chunk.memory) {
+                    if is_arc_unique(&mut chunk.memory) {
                         // Reuse chunk.
                         chunk.offset = 0;
                     }
@@ -202,9 +208,9 @@ where
                     let chunk = self.exhausted[chunk_offset].as_mut().expect("Chunk index points to deallocated chunk. Probably incorrect allocator instance");
                     drop(block);
 
-                    if is_unique(&mut chunk.memory) {
+                    if is_arc_unique(&mut chunk.memory) {
                         let memory = self.exhausted[chunk_offset].take().unwrap().memory;
-                        let memory = Arc::try_unwrap(memory).expect("Uniqueness checked");
+                        let memory = arc_unwrap(memory);
                         device.deallocate_memory(memory);
                         *allocations_remains += 1;
                         heap.dealloc(self.chunk_size);
@@ -228,7 +234,7 @@ where
     pub unsafe fn cleanup(&mut self, device: &impl MemoryDevice<M>) {
         if let Some(mut chunk) = self.ready.take() {
             debug_assert!(
-                is_unique(&mut chunk.memory),
+                is_arc_unique(&mut chunk.memory),
                 "All blocks must be deallocated before cleanup"
             );
 
@@ -305,14 +311,4 @@ where
         Ok(r) => core::cmp::min(l, r),
         Err(_) => l,
     }
-}
-
-fn is_unique<M>(arc: &mut Arc<M>) -> bool {
-    let strong_count = Arc::strong_count(&*arc);
-    debug_assert_ne!(strong_count, 0);
-    debug_assert!(
-        strong_count > 1 || Arc::get_mut(arc).is_some(),
-        "`Weak` pointers are never constructed"
-    );
-    strong_count == 1
 }
