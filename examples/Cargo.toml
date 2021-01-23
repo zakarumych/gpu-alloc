@@ -11,14 +11,14 @@ mock = ["gpu-alloc-mock"]
 gfx = ["gpu-alloc-gfx"]
 
 [dependencies]
-gpu-alloc = { path = "../gpu-alloc", version = "=0.2" }
+gpu-alloc = { path = "../gpu-alloc", version = "=0.3" }
 eyre = "0.6"
 color-eyre = "0.5"
-gpu-alloc-mock = { path = "../mock", version = "=0.1", optional = true }
-gpu-alloc-gfx = { path = "../gfx", version = "=0.1", optional = true }
+gpu-alloc-mock = { path = "../mock", version = "=0.2", optional = true }
+gpu-alloc-gfx = { path = "../gfx", version = "=0.2", optional = true }
 gfx-hal = { version = "0.6", optional = true }
 gfx-backend-vulkan = { version = "0.6", optional = true }
-gpu-alloc-erupt = { path = "../erupt", version = "=0.1", optional = true }
+gpu-alloc-erupt = { path = "../erupt", version = "=0.2", optional = true }
 erupt = { version = "0.16", optional = true, features = ["loading"] }
 
 [[bin]]

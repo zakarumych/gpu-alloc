@@ -1,17 +1,17 @@
 [package]
 name = "gpu-alloc-gfx"
-version = "0.1.1"
+version = "0.2.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 description = "`gfx-hal` backend for `gfx-alloc`"
 keywords = ["gpu", "vulkan", "allocation", "no-std", "gfx"]
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/gpu-alloc-gfx/0.1.1"
+documentation = "https://docs.rs/gpu-alloc-gfx/0.2.0"
 homepage = "https://github.com/zakarumych/gpu-alloc"
 repository = "https://github.com/zakarumych/gpu-alloc"
 
 
 [dependencies]
-gpu-alloc-types = { path = "../types", version = "0.1" }
+gpu-alloc-types = { path = "../types", version = "0.2" }
 tracing = { version = "0.1", features = ["attributes"], optional = true }
 gfx-hal = { version = "0.6", default-features = false }
