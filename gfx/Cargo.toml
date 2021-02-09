@@ -1,6 +1,6 @@
 [package]
 name = "gpu-alloc-gfx"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 description = "`gfx-hal` backend for `gfx-alloc`"

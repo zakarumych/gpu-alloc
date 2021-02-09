@@ -15,10 +15,10 @@ gpu-alloc = { path = "../gpu-alloc", version = "=0.3" }
 eyre = "0.6"
 color-eyre = "0.5"
 gpu-alloc-mock = { path = "../mock", version = "=0.2", optional = true }
-gpu-alloc-gfx = { path = "../gfx", version = "=0.2", optional = true }
+gpu-alloc-gfx = { path = "../gfx", version = "=0.3", optional = true }
 gfx-hal = { version = "0.7", optional = true }
 gfx-backend-vulkan = { version = "0.7", optional = true }
-gpu-alloc-erupt = { path = "../erupt", version = "=0.2", optional = true }
+gpu-alloc-erupt = { path = "../erupt", version = "=0.3", optional = true }
 erupt = { version = "0.17", optional = true, features = ["loading"] }
 
 [[bin]]
