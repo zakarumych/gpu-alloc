@@ -262,8 +262,8 @@ where
         memory_heaps: memory_properties
             .memory_heaps
             .iter()
-            .map(|&memory_heap_size| MemoryHeap {
-                size: memory_heap_size,
+            .map(|&memory_heap| MemoryHeap {
+                size: memory_heap.size,
             })
             .collect(),
         buffer_device_address: false,
