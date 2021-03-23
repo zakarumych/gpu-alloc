@@ -1,6 +1,6 @@
 use alloc::sync::Arc;
 
-/// Guarantees uniquencess only if `Weak` pointers are never created
+/// Guarantees uniqueness only if `Weak` pointers are never created
 /// from this `Arc` or clones.
 pub(crate) fn is_arc_unique<M>(arc: &mut Arc<M>) -> bool {
     let strong_count = Arc::strong_count(&*arc);
