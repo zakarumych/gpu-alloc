@@ -21,9 +21,9 @@ use {
 /// Memory allocator for Vulkan-like APIs.
 #[derive(Debug)]
 pub struct GpuAllocator<M> {
-    dedicated_treshold: u64,
-    preferred_dedicated_treshold: u64,
-    transient_dedicated_treshold: u64,
+    dedicated_threshold: u64,
+    preferred_dedicated_threshold: u64,
+    transient_dedicated_threshold: u64,
     max_memory_allocation_size: u64,
     memory_for_usage: MemoryForUsage,
     memory_types: Box<[MemoryType]>,
@@ -63,7 +63,7 @@ where
     M: MemoryBounds + 'static,
 {
     /// Creates  new instance of `GpuAllocator`.
-    /// Provided `DeviceProperties` should match propertices of `MemoryDevice` that will be used
+    /// Provided `DeviceProperties` should match properties of `MemoryDevice` that will be used
     /// with created `GpuAllocator` instance.
     #[cfg_attr(feature = "tracing", tracing::instrument)]
     pub fn new(config: Config, props: DeviceProperties<'_>) -> Self {
@@ -78,17 +78,17 @@ where
         );
 
         GpuAllocator {
-            dedicated_treshold: config
-                .dedicated_treshold
+            dedicated_threshold: config
+                .dedicated_threshold
                 .max(props.max_memory_allocation_size),
-            preferred_dedicated_treshold: config
-                .preferred_dedicated_treshold
-                .min(config.dedicated_treshold)
+            preferred_dedicated_threshold: config
+                .preferred_dedicated_threshold
+                .min(config.dedicated_threshold)
                 .max(props.max_memory_allocation_size),
 
-            transient_dedicated_treshold: config
-                .transient_dedicated_treshold
-                .max(config.dedicated_treshold)
+            transient_dedicated_threshold: config
+                .transient_dedicated_threshold
+                .max(config.dedicated_threshold)
                 .max(props.max_memory_allocation_size),
 
             max_memory_allocation_size: props.max_memory_allocation_size,
@@ -223,23 +223,23 @@ where
             let strategy = match (dedicated, transient) {
                 (Some(Dedicated::Required), _) => Strategy::Dedicated,
                 (Some(Dedicated::Preferred), _)
-                    if request.size >= self.preferred_dedicated_treshold =>
+                    if request.size >= self.preferred_dedicated_threshold =>
                 {
                     Strategy::Dedicated
                 }
                 (_, true) => {
-                    let treshold = self.transient_dedicated_treshold.min(linear_chunk);
+                    let threshold = self.transient_dedicated_threshold.min(linear_chunk);
 
-                    if request.size < treshold {
+                    if request.size < threshold {
                         Strategy::Linear
                     } else {
                         Strategy::Dedicated
                     }
                 }
                 (_, false) => {
-                    let treshold = self.dedicated_treshold.min(heap.size() / 32);
+                    let threshold = self.dedicated_threshold.min(heap.size() / 32);
 
-                    if request.size < treshold {
+                    if request.size < threshold {
                         Strategy::Buddy
                     } else {
                         Strategy::Dedicated
