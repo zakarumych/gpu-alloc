@@ -35,6 +35,9 @@ pub struct MockMemoryDevice {
     allocations_remains: Cell<u32>,
     memory_heaps_remaining_capacity: Box<[Cell<u64>]>,
     allocations: RefCell<Slab<MockMemory>>,
+
+    total_allocations_counter: Cell<u64>,
+    total_deallocations_counter: Cell<u64>,
 }
 
 impl MockMemoryDevice {
@@ -56,6 +59,9 @@ impl MockMemoryDevice {
 
             allocations_remains: Cell::new(props.max_memory_allocation_count),
             allocations: RefCell::new(Slab::new()),
+
+            total_allocations_counter: Cell::new(0),
+            total_deallocations_counter: Cell::new(0),
         }
     }
 
@@ -68,6 +74,14 @@ impl MockMemoryDevice {
             non_coherent_atom_size: self.non_coherent_atom_size,
             buffer_device_address: self.buffer_device_address,
         }
+    }
+
+    pub fn total_allocations(&self) -> u64 {
+        self.total_allocations_counter.get()
+    }
+
+    pub fn total_deallocations(&self) -> u64 {
+        self.total_deallocations_counter.get()
     }
 }
 
@@ -102,6 +116,10 @@ impl MemoryDevice<usize> for MockMemoryDevice {
         heap.set(heap.get() - size);
 
         tracing::info!("Memory object allocated");
+
+        self.total_allocations_counter
+            .set(self.total_allocations_counter.get() + 1);
+
         Ok(self.allocations.borrow_mut().insert(MockMemory {
             memory_type,
             size,
@@ -118,6 +136,9 @@ impl MemoryDevice<usize> for MockMemoryDevice {
             [self.memory_types[memory.memory_type as usize].heap as usize];
         heap.set(heap.get() + memory.size);
         tracing::info!("Memory object deallocated");
+
+        self.total_deallocations_counter
+            .set(self.total_deallocations_counter.get() + 1);
     }
 
     #[tracing::instrument(skip(self))]

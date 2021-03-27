@@ -6,12 +6,11 @@ edition = "2018"
 publish = false
 
 [features]
-tracing = ["gpu-alloc/tracing"]
 mock = ["gpu-alloc-mock"]
 gfx = ["gpu-alloc-gfx"]
 
 [dependencies]
-gpu-alloc = { path = "../gpu-alloc", version = "=0.3" }
+gpu-alloc = { path = "../gpu-alloc", version = "=0.3", features = ["tracing"] }
 eyre = "0.6"
 color-eyre = "0.5"
 gpu-alloc-mock = { path = "../mock", version = "=0.2", optional = true }
@@ -21,17 +20,26 @@ gfx-backend-vulkan = { version = "0.7", optional = true }
 gpu-alloc-erupt = { path = "../erupt", version = "=0.3", optional = true }
 erupt = { version = "0.17", optional = true, features = ["loading"] }
 
+tracing-subscriber = { version = "0.2", features = ["fmt", "env-filter"] }
+tracing-error = { version = "0.1" }
+tracing = { version = "0.1" }
+
 [[bin]]
 name = "mock"
 path = "src/mock.rs"
-required-features = ["gpu-alloc-mock"]
+required-features = ["mock"]
 
 [[bin]]
 name = "gfx"
 path = "src/gfx.rs"
-required-features = ["gpu-alloc-gfx", "gfx-hal", "gfx-backend-vulkan"]
+required-features = ["gfx", "gfx-hal", "gfx-backend-vulkan"]
 
 [[bin]]
 name = "erupt"
 path = "src/erupt.rs"
 required-features = ["gpu-alloc-erupt", "erupt"]
+
+[[bin]]
+name = "linear-reuse"
+path = "src/linear_reuse.rs"
+required-features = ["mock"]
