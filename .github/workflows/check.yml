@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust-toolchain: [stable, nightly, '1.46.0']
+        rust-toolchain: [stable, nightly]
     steps:
     - uses: actions/checkout@v2
     - name: Install ${{ matrix.rust-toolchain }} toolchain
@@ -31,3 +31,17 @@ jobs:
       with:
         command: test
         args: --all --all-features
+  test-1.46:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install 1.46.0 toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: '1.46.0'
+    - name: Run cargo test
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all --libs --all-features
