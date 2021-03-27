@@ -18,19 +18,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Install nightly toolchain with clippy available
+    - name: Install nightly toolchain with rustfmt available
       uses: actions-rs/toolchain@v1
       with:
         profile: minimal
         toolchain: nightly
-        components: clippy
+        components: rustfmt
     - name: Run cargo fmt
       uses: actions-rs/cargo@v1
       with:
         command: fmt
         args: --all -- --check
 
-  cllippy:
+  clippy:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -39,9 +39,9 @@ jobs:
       with:
         profile: minimal
         toolchain: nightly
-        components: rustfmt
+        components: clippy
     - name: Run cargo clippy
       uses: actions-rs/clippy-check@v1
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        args: --all --all-features -- -D warnings
+        args: --all --lib --all-features -- -D warnings

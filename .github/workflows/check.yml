@@ -44,4 +44,4 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --all --libs --all-features
+        args: --all --lib --all-features
