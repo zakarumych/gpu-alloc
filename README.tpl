@@ -13,7 +13,7 @@ Supported Rust Versions
 The minimum supported version is 1.40.
 The current version is not guaranteed to build on Rust versions earlier than the minimum supported version.
 
-`gpu-alloc-erupt` crate requires version 1.46 or higher due to dependency on `erupt` crate.
+`gpu-alloc-erupt` crate requires version 1.48 or higher due to dependency on `erupt` crate.
 
 ## License
 
