@@ -30,6 +30,9 @@ pub struct FreeListBlock<M> {
     pub ptr: Option<NonNull<u8>>,
 }
 
+unsafe impl<M> Sync for FreeListBlock<M> where M: Sync {}
+unsafe impl<M> Send for FreeListBlock<M> where M: Send {}
+
 impl<M> FreeListBlock<M> {
     fn cmp(&self, other: &Self) -> Ordering {
         debug_assert_eq!(
