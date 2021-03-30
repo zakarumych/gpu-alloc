@@ -33,6 +33,10 @@ mod slab;
 mod usage;
 mod util;
 
+// experimental sub-allocator for large transient allocations.
+#[cfg(feature = "freelist")]
+mod freelist;
+
 pub use {
     self::{allocator::*, block::MemoryBlock, config::*, error::*, usage::*},
     gpu_alloc_types::*,

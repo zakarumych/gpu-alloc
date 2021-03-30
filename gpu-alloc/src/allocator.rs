@@ -18,6 +18,9 @@ use {
     },
 };
 
+#[cfg(feature = "freelist")]
+use crate::freelist::{FreeListAllocator, FreeListBlock};
+
 /// Memory allocator for Vulkan-like APIs.
 #[derive(Debug)]
 pub struct GpuAllocator<M> {
@@ -38,6 +41,12 @@ pub struct GpuAllocator<M> {
 
     linear_allocators: Box<[Option<LinearAllocator<M>>]>,
     buddy_allocators: Box<[Option<BuddyAllocator<M>>]>,
+
+    #[cfg(feature = "freelist")]
+    freelist_threshold: u64,
+
+    #[cfg(feature = "freelist")]
+    freelist_allocators: Box<[Option<FreeListAllocator<M>>]>,
 }
 
 /// Hints for allocator to decide on allocation strategy.
@@ -115,6 +124,11 @@ where
 
             linear_allocators: props.memory_types.as_ref().iter().map(|_| None).collect(),
             buddy_allocators: props.memory_types.as_ref().iter().map(|_| None).collect(),
+
+            #[cfg(feature = "freelist")]
+            freelist_threshold: 0,
+            #[cfg(feature = "freelist")]
+            freelist_allocators: props.memory_types.as_ref().iter().map(|_| None).collect(),
         }
     }
 
@@ -164,6 +178,8 @@ where
             Linear,
             Buddy,
             Dedicated,
+            #[cfg(feature = "freelist")]
+            FreeList,
         }
 
         request.usage = with_implicit_usage_flags(request.usage);
@@ -231,7 +247,19 @@ where
                     let threshold = self.transient_dedicated_threshold.min(linear_chunk);
 
                     if request.size < threshold {
-                        Strategy::Linear
+                        #[cfg(feature = "freelist")]
+                        {
+                            if request.size < self.freelist_threshold {
+                                Strategy::Linear
+                            } else {
+                                Strategy::FreeList
+                            }
+                        }
+
+                        #[cfg(not(feature = "freelist"))]
+                        {
+                            Strategy::Linear
+                        }
                     } else {
                         Strategy::Dedicated
                     }
@@ -321,6 +349,59 @@ where
                         Err(err) => return Err(err),
                     }
                 }
+                #[cfg(feature = "freelist")]
+                Strategy::FreeList => {
+                    let allocator = match &mut self.freelist_allocators[index as usize] {
+                        Some(allocator) => allocator,
+                        slot => {
+                            let memory_type = &self.memory_types[index as usize];
+
+                            let dealloc_threshold = linear_chunk
+                                .checked_mul(2)
+                                .unwrap_or((i64::MAX as u64).max(linear_chunk));
+
+                            slot.get_or_insert(FreeListAllocator::new(
+                                linear_chunk,
+                                dealloc_threshold,
+                                index,
+                                memory_type.props,
+                                if host_visible_non_coherent(memory_type.props) {
+                                    self.non_coherent_atom_mask
+                                } else {
+                                    0
+                                },
+                            ))
+                        }
+                    };
+                    let result = allocator.alloc(
+                        device,
+                        request.size,
+                        request.align_mask,
+                        flags,
+                        heap,
+                        &mut self.allocations_remains,
+                    );
+
+                    match result {
+                        Ok(block) => {
+                            return Ok(MemoryBlock::new(
+                                index,
+                                memory_type.props,
+                                block.offset,
+                                block.size,
+                                atom_mask,
+                                MemoryBlockFlavor::FreeList {
+                                    chunk: block.chunk,
+                                    ptr: block.ptr,
+                                    memory: block.memory,
+                                },
+                            ))
+                        }
+                        Err(AllocationError::OutOfDeviceMemory) => continue,
+                        Err(err) => return Err(err),
+                    }
+                }
+
                 Strategy::Buddy => {
                     let allocator = match &mut self.buddy_allocators[index as usize] {
                         Some(allocator) => allocator,
@@ -432,7 +513,6 @@ where
                 index,
                 memory,
             } => {
-                let memory_type = memory_type;
                 let heap = self.memory_types[memory_type as usize].heap;
                 let heap = &mut self.memory_heaps[heap as usize];
 
@@ -447,6 +527,28 @@ where
                         size,
                         memory,
                         index,
+                        ptr,
+                        chunk,
+                    },
+                    heap,
+                    &mut self.allocations_remains,
+                );
+            }
+            #[cfg(feature = "freelist")]
+            MemoryBlockFlavor::FreeList { chunk, ptr, memory } => {
+                let heap = self.memory_types[memory_type as usize].heap;
+                let heap = &mut self.memory_heaps[heap as usize];
+
+                let allocator = self.freelist_allocators[memory_type as usize]
+                    .as_mut()
+                    .expect("Allocator should exist");
+
+                allocator.dealloc(
+                    device,
+                    FreeListBlock {
+                        offset,
+                        size,
+                        memory,
                         ptr,
                         chunk,
                     },
@@ -469,6 +571,17 @@ where
     pub unsafe fn cleanup(&mut self, device: &impl MemoryDevice<M>) {
         for allocator in self.linear_allocators.iter_mut().filter_map(Option::as_mut) {
             allocator.cleanup(device);
+        }
+
+        #[cfg(feature = "freelist")]
+        {
+            for allocator in self
+                .freelist_allocators
+                .iter_mut()
+                .filter_map(Option::as_mut)
+            {
+                allocator.cleanup(device);
+            }
         }
     }
 }

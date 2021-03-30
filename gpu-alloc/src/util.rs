@@ -16,8 +16,9 @@ pub(crate) fn is_arc_unique<M>(arc: &mut Arc<M>) -> bool {
 
 /// Can be used instead of `Arc::try_unwrap(arc).unwrap()`
 /// when it is guaranteed to succeed.
-pub(crate) unsafe fn arc_unwrap<M>(arc: Arc<M>) -> M {
+pub(crate) unsafe fn arc_unwrap<M>(mut arc: Arc<M>) -> M {
     use core::{mem::ManuallyDrop, ptr::read};
+    debug_assert!(is_arc_unique(&mut arc));
 
     // Get raw pointer to inner value.
     let raw = Arc::into_raw(arc);

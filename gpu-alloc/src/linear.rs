@@ -99,8 +99,9 @@ where
             "GpuAllocator must not request allocations equal or greater to chunks size"
         );
 
-        let size = align_up(size, self.atom_mask)
-            .expect("Any value not greater than aligned chunk size must fit for alignment");
+        let size = align_up(size, self.atom_mask).expect(
+            "Any value not greater than chunk size (which is aligned) has to fit for alignment",
+        );
 
         let align_mask = align_mask | self.atom_mask;
         let host_visible = self.host_visible();
