@@ -23,11 +23,11 @@ macro_rules! try_continue {
 
 #[derive(Debug)]
 pub struct FreeListBlock<M> {
-    pub chunk: u64,
     pub memory: Arc<M>,
+    pub ptr: Option<NonNull<u8>>,
     pub offset: u64,
     pub size: u64,
-    pub ptr: Option<NonNull<u8>>,
+    pub chunk: u64,
 }
 
 unsafe impl<M> Sync for FreeListBlock<M> where M: Sync {}
@@ -115,27 +115,32 @@ where
                 for (index, region) in iter {
                     let offset = try_continue!(align_up(region.offset, align_mask));
                     let next_offset = try_continue!(offset.checked_add(size));
-                    if next_offset == offset + region.size {
-                        let region = self.freelist.remove(index);
-                        // dbg!(&region, &self.freelist);
 
-                        self.total_free -= size;
-                        return Ok(region);
-                    } else if next_offset < offset + region.size {
-                        let block = FreeListBlock {
-                            chunk: region.chunk,
-                            memory: region.memory.clone(),
-                            offset: region.offset,
-                            size,
-                            ptr: region.ptr,
-                        };
-                        region.offset = next_offset;
-                        region.size -= size;
-                        ptr_advance(&mut region.ptr, size);
+                    match Ord::cmp(&next_offset, &(offset + region.size)) {
+                        Ordering::Equal => {
+                            let region = self.freelist.remove(index);
+                            // dbg!(&region, &self.freelist);
 
-                        // dbg!(&block, &self.freelist);
-                        self.total_free -= size;
-                        return Ok(block);
+                            self.total_free -= size;
+                            return Ok(region);
+                        }
+                        Ordering::Less => {
+                            let block = FreeListBlock {
+                                chunk: region.chunk,
+                                memory: region.memory.clone(),
+                                offset: region.offset,
+                                size,
+                                ptr: region.ptr,
+                            };
+                            region.offset = next_offset;
+                            region.size -= size;
+                            ptr_advance(&mut region.ptr, size);
+
+                            // dbg!(&block, &self.freelist);
+                            self.total_free -= size;
+                            return Ok(block);
+                        }
+                        _ => {}
                     }
                 }
             }

@@ -117,8 +117,8 @@ fn one_usage(usage: UsageFlags, memory_types: &[MemoryType]) -> MemoryForOneUsag
         .fold(0u32, |mask, index| mask | 1u32 << index);
 
     MemoryForOneUsage {
-        types,
         mask,
+        types,
         types_count,
     }
 }

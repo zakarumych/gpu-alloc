@@ -358,7 +358,7 @@ where
 
                             let dealloc_threshold = linear_chunk
                                 .checked_mul(2)
-                                .unwrap_or((i64::MAX as u64).max(linear_chunk));
+                                .unwrap_or_else(|| (i64::MAX as u64).max(linear_chunk));
 
                             slot.get_or_insert(FreeListAllocator::new(
                                 linear_chunk,
@@ -497,10 +497,10 @@ where
                 allocator.dealloc(
                     device,
                     LinearBlock {
-                        offset,
-                        size,
                         memory,
                         ptr,
+                        offset,
+                        size,
                         chunk,
                     },
                     heap,
@@ -523,12 +523,12 @@ where
                 allocator.dealloc(
                     device,
                     BuddyBlock {
+                        memory,
+                        ptr,
                         offset,
                         size,
-                        memory,
-                        index,
-                        ptr,
                         chunk,
+                        index,
                     },
                     heap,
                     &mut self.allocations_remains,
@@ -546,10 +546,10 @@ where
                 allocator.dealloc(
                     device,
                     FreeListBlock {
-                        offset,
-                        size,
                         memory,
                         ptr,
+                        offset,
+                        size,
                         chunk,
                     },
                     heap,
