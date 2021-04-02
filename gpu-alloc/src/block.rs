@@ -15,11 +15,20 @@ struct Relevant;
 impl Drop for Relevant {
     #[cfg(feature = "tracing")]
     fn drop(&mut self) {
+        #[cfg(feature = "std")]
+        {
+            if std::thread::panicking() {
+                return;
+            }
+        }
         tracing::error!("Memory block wasn't deallocated");
     }
 
     #[cfg(all(not(feature = "tracing"), feature = "std"))]
     fn drop(&mut self) {
+        if std::thread::panicking() {
+            return;
+        }
         eprintln!("Memory block wasn't deallocated")
     }
 
