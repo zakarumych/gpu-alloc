@@ -207,7 +207,6 @@ where
             self.freelist.push(region);
 
             // dbg!(&block, &self.freelist);
-            self.total_free -= size;
             Ok(block)
         } else {
             debug_assert_eq!(size, region.size);
@@ -252,6 +251,7 @@ where
                             next.size += block.size;
                             drop(block);
                             // dbg!(&self.freelist);
+                            self.total_free += block_size;
                             return;
                         }
                     }
@@ -284,6 +284,7 @@ where
                                 self.freelist.remove(index);
                             }
                             // dbg!(&self.freelist);
+                            self.total_free += block_size;
                             return;
                         }
                     }
@@ -300,6 +301,7 @@ where
                             prev.size += block.size;
                             drop(block);
                             // dbg!(&self.freelist);
+                            self.total_free += block_size;
                             return;
                         }
                     }
