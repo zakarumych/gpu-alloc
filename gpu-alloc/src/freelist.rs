@@ -118,10 +118,9 @@ impl<M> FreeList<M> {
 
                     if next.is_prefix_block(&block) {
                         next.merge_prefix_block(block);
-                        return;
+                    } else {
+                        self.array.insert(0, FreeListRegion::from_block(block));
                     }
-
-                    self.array.insert(0, FreeListRegion::from_block(block));
                 }
                 [.., prev, next] => {
                     debug_assert!(!prev.is_prefix_block(&block));
@@ -135,19 +134,18 @@ impl<M> FreeList<M> {
                             let prev = &mut self.array[index - 1];
                             prev.merge(next);
                         }
-                        return;
-                    }
-                    if prev.is_suffix_block(&block) {
+                    } else if prev.is_suffix_block(&block) {
                         prev.merge_suffix_block(block);
-                        return;
+                        self.total += block_size;
+                    } else {
+                        self.array.insert(index, FreeListRegion::from_block(block));
                     }
-
-                    self.array.insert(index, FreeListRegion::from_block(block));
                 }
             },
-            Err(_) => self.array.push(FreeListRegion::from_block(block)),
+            Err(_) => {
+                self.array.push(FreeListRegion::from_block(block));
+            }
         }
-
         self.total += block_size;
     }
 
@@ -421,7 +419,7 @@ where
             let chunk_size = self.chunk_size;
             memory.for_each(|m| {
                 device.deallocate_memory(m);
-                *allocations_remains -= 1;
+                *allocations_remains += 1;
                 heap.dealloc(chunk_size);
             });
         }
