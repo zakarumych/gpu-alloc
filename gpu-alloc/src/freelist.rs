@@ -418,7 +418,12 @@ where
         self.freelist.insert_block(block);
 
         if let Some(memory) = self.freelist.drain(self.dealloc_threshold) {
-            memory.for_each(|m| device.deallocate_memory(m));
+            let chunk_size = self.chunk_size;
+            memory.for_each(|m| {
+                device.deallocate_memory(m);
+                *allocations_remains -= 1;
+                heap.dealloc(chunk_size);
+            });
         }
     }
 
