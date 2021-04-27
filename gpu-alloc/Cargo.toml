@@ -12,7 +12,7 @@ repository = "https://github.com/zakarumych/gpu-alloc"
 
 [features]
 std = []
-default = ["std"]
+default = ["std", "freelist"]
 
 freelist = []
 
