@@ -55,6 +55,7 @@ impl<M> FreeList<M> {
             start: 0,
             end: memory_size,
         });
+        self.total += memory_size;
         self.get_block_at(self.array.len() - 1, align_mask, size)
     }
 
@@ -93,7 +94,7 @@ impl<M> FreeList<M> {
             };
 
             region.end = aligned_start;
-            self.total -= region.end - aligned_start;
+            self.total -= block.size;
 
             block
         } else {
@@ -136,7 +137,6 @@ impl<M> FreeList<M> {
                         }
                     } else if prev.is_suffix_block(&block) {
                         prev.merge_suffix_block(block);
-                        self.total += block_size;
                     } else {
                         self.array.insert(index, FreeListRegion::from_block(block));
                     }
