@@ -12,13 +12,11 @@ use {
 };
 
 unsafe fn opt_ptr_add(ptr: Option<NonNull<u8>>, size: u64) -> Option<NonNull<u8>> {
-    if let Some(ptr) = ptr {
+    ptr.map(|ptr| {
         // Size is within memory region started at `ptr`.
         // size is within `chunk_size` that fits `isize`.
-        Some(NonNull::new_unchecked(ptr.as_ptr().offset(size as isize)))
-    } else {
-        None
-    }
+        NonNull::new_unchecked(ptr.as_ptr().offset(size as isize))
+    })
 }
 
 #[derive(Debug)]
@@ -68,7 +66,7 @@ impl<M> FreeList<M> {
                     .find(|(_, region)| match region.end.checked_sub(size) {
                         Some(start) => {
                             let aligned_start = align_down(start, align_mask);
-                            return aligned_start >= region.start;
+                            aligned_start >= region.start
                         }
                         None => false,
                     })?;
