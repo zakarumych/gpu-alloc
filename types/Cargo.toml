@@ -4,11 +4,13 @@ version = "0.2.1"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 description = "Core types of gpu-alloc crate"
-keywords = ["gpu", "vulkan", "allocation", "no-std"]
-license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/gpu-alloc-types/0.2.1"
+documentation = "https://docs.rs/gpu-alloc-types"
+readme = "../README.md"
 homepage = "https://github.com/zakarumych/gpu-alloc"
 repository = "https://github.com/zakarumych/gpu-alloc"
+license = "MIT OR Apache-2.0"
+keywords = ["gpu", "vulkan", "allocation", "no-std"]
+categories = ["graphics", "memory-management", "no-std", "game-development"]
 
 [dependencies]
 bitflags = { version = "1.2", default-features = false }

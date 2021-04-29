@@ -4,11 +4,13 @@ version = "0.4.4"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 description = "Implementation agnostic memory allocator for Vulkan like APIs"
-keywords = ["gpu", "vulkan", "allocation", "no-std"]
-license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/gpu-alloc-types/0.3.0"
+documentation = "https://docs.rs/gpu-alloc-types"
+readme = "../README.md"
 homepage = "https://github.com/zakarumych/gpu-alloc"
 repository = "https://github.com/zakarumych/gpu-alloc"
+license = "MIT OR Apache-2.0"
+keywords = ["gpu", "vulkan", "allocation", "no-std"]
+categories = ["graphics", "memory-management", "no-std", "game-development"]
 
 [features]
 std = []
