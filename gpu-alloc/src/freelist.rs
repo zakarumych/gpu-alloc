@@ -198,10 +198,17 @@ impl<M> FreeListRegion<M> {
             self.chunk == block.chunk
         );
 
-        debug_assert_eq!(
-            Ord::cmp(&self.start, &block.offset),
-            Ord::cmp(&self.end, &(block.offset + block.size))
-        );
+        if self.chunk == block.chunk {
+            debug_assert_eq!(
+                Ord::cmp(&self.start, &block.offset),
+                Ord::cmp(&self.end, &(block.offset + block.size)),
+                "Free region {{ start: {}, end: {} }} overlaps with block {{ offset: {}, size: {} }}",
+                self.start,
+                self.end,
+                block.offset,
+                block.size,
+            );
+        }
 
         Ord::cmp(&self.chunk, &block.chunk).then(Ord::cmp(&self.start, &block.offset))
     }
