@@ -15,4 +15,4 @@ categories = ["graphics", "memory-management", "game-development"]
 [dependencies]
 gpu-alloc-types = { path = "../types", version = "0.2" }
 tracing = { version = "0.1", features = ["attributes"], optional = true }
-gfx-hal = { version = "0.7", default-features = false }
+gfx-hal = { version = "0.8", default-features = false }
