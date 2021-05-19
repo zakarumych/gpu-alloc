@@ -242,7 +242,7 @@ pub fn gfx_device_properties<B>(adapter: &Adapter<B>) -> DeviceProperties<'stati
 where
     B: Backend,
 {
-    let limits = adapter.physical_device.limits();
+    let limits = adapter.physical_device.properties().limits;
     let memory_properties = adapter.physical_device.memory_properties();
     DeviceProperties {
         max_memory_allocation_count: u32::try_from(limits.max_memory_allocation_count)
