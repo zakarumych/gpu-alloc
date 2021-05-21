@@ -333,15 +333,15 @@ impl<M> Drop for FreeListAllocator<M> {
         match Ord::cmp(&self.total_allocations, &self.total_deallocations) {
             Ordering::Equal => {}
             Ordering::Greater => {
-                tracing::error!("Not all blocks were deallocated")
+                report_error_on_drop!("Not all blocks were deallocated")
             }
             Ordering::Less => {
-                tracing::error!("More blocks deallocated than allocated")
+                report_error_on_drop!("More blocks deallocated than allocated")
             }
         }
 
         if !self.freelist.array.is_empty() {
-            tracing::error!(
+            report_error_on_drop!(
                 "FreeListAllocator has free blocks on drop. Allocator should be cleaned"
             );
         }
@@ -480,15 +480,18 @@ where
             memory.for_each(|m| device.deallocate_memory(m));
         }
 
-        if self.total_allocations == self.total_deallocations {
-            if !self.freelist.array.is_empty() {
-                tracing::error!(
-                    "Some regions were not deallocated on cleanup, although all blocks are free.
-                    This is a bug in `FreeBlockAllocator`.
-                    See array of free blocks left:
-                    {:#?}",
-                    self.freelist.array,
-                );
+        #[cfg(feature = "tracing")]
+        {
+            if self.total_allocations == self.total_deallocations {
+                if !self.freelist.array.is_empty() {
+                    tracing::error!(
+                        "Some regions were not deallocated on cleanup, although all blocks are free.
+                        This is a bug in `FreeBlockAllocator`.
+                        See array of free blocks left:
+                        {:#?}",
+                        self.freelist.array,
+                    );
+                }
             }
         }
     }
