@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] - 2021-05-21
+
+### Fixed
+- Fixed freeing tail block in its region for FreeBlockAllocator.
+
+## [0.4.5] - 2021-05-03
+
+### Fixed
+- Fixed checking region-block overlap
+
 ## [0.4.4] - 2021-04-28
 ### Changed
 - `freelist` feature to use free-list based allocator instead of arena allocator now enabled by default

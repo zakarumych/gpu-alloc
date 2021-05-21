@@ -140,9 +140,17 @@ impl<M> FreeList<M> {
                     }
                 }
             },
-            Err(_) => {
-                self.array.push(FreeListRegion::from_block(block));
-            }
+            Err(_) => match &mut self.array[..] {
+                [] => self.array.push(FreeListRegion::from_block(block)),
+                [.., prev] => {
+                    debug_assert!(!prev.is_prefix_block(&block));
+                    if prev.is_suffix_block(&block) {
+                        prev.merge_suffix_block(block);
+                    } else {
+                        self.array.push(FreeListRegion::from_block(block));
+                    }
+                }
+            },
         }
         self.total += block_size;
     }
@@ -315,6 +323,29 @@ pub(crate) struct FreeListAllocator<M> {
     memory_type: u32,
     props: MemoryPropertyFlags,
     atom_mask: u64,
+
+    total_allocations: u64,
+    total_deallocations: u64,
+}
+
+impl<M> Drop for FreeListAllocator<M> {
+    fn drop(&mut self) {
+        match Ord::cmp(&self.total_allocations, &self.total_deallocations) {
+            Ordering::Equal => {}
+            Ordering::Greater => {
+                tracing::error!("Not all blocks were deallocated")
+            }
+            Ordering::Less => {
+                tracing::error!("More blocks deallocated than allocated")
+            }
+        }
+
+        if !self.freelist.array.is_empty() {
+            tracing::error!(
+                "FreeListAllocator has free blocks on drop. Allocator should be cleaned"
+            );
+        }
+    }
 }
 
 impl<M> FreeListAllocator<M>
@@ -339,6 +370,9 @@ where
             memory_type,
             props,
             atom_mask,
+
+            total_allocations: 0,
+            total_deallocations: 0,
         }
     }
 
@@ -405,6 +439,7 @@ where
             self.freelist
                 .get_block_from_new_memory(memory, self.chunk_size, ptr, align_mask, size);
 
+        self.total_allocations += 1;
         Ok(block)
     }
 
@@ -419,6 +454,7 @@ where
         debug_assert!(block.size < self.chunk_size);
         debug_assert_ne!(block.size, 0);
         self.freelist.insert_block(block);
+        self.total_deallocations += 1;
 
         if let Some(memory) = self.freelist.drain(self.dealloc_threshold) {
             let chunk_size = self.chunk_size;
@@ -442,6 +478,18 @@ where
     pub unsafe fn cleanup(&mut self, device: &impl MemoryDevice<M>) {
         if let Some(memory) = self.freelist.drain(0) {
             memory.for_each(|m| device.deallocate_memory(m));
+        }
+
+        if self.total_allocations == self.total_deallocations {
+            if !self.freelist.array.is_empty() {
+                tracing::error!(
+                    "Some regions were not deallocated on cleanup, although all blocks are free.
+                    This is a bug in `FreeBlockAllocator`.
+                    See array of free blocks left:
+                    {:#?}",
+                    self.freelist.array,
+                );
+            }
         }
     }
 
