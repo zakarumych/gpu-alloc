@@ -399,6 +399,7 @@ where
         let host_visible = self.host_visible();
 
         if let Some(block) = self.freelist.get_block(align_mask, size) {
+            self.total_allocations += 1;
             return Ok(block);
         }
 
