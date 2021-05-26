@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Support for `ash` API.
+
+### Fixed
+- Erupt checks for correct extension to determine buffer device feature availability.
+
+## [0.4.7] - 2021-05-22
+
+### Fixed
+- Add missing block allocation counting for free-list allocator.
+
 ## [0.4.6] - 2021-05-21
 
 ### Fixed
