@@ -252,7 +252,7 @@ pub unsafe fn device_properties(
     let memory_properties = instance.get_physical_device_memory_properties(physical_device, None);
 
     let buffer_device_address =
-        if instance.enabled().vk1_1 || instance.enabled().khr_get_display_properties2 {
+        if instance.enabled().vk1_1 || instance.enabled().khr_get_physical_device_properties2 {
             let mut bda_features_available = instance.enabled().vk1_2;
 
             if !bda_features_available {
