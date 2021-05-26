@@ -8,10 +8,9 @@ publish = false
 [features]
 mock = ["gpu-alloc-mock"]
 gfx = ["gpu-alloc-gfx"]
-freelist = ["gpu-alloc/freelist"]
 
 [dependencies]
-gpu-alloc = { path = "../gpu-alloc", version = "=0.4", features = ["tracing"] }
+gpu-alloc = { path = "../gpu-alloc", version = "=0.5.0", features = ["tracing"] }
 eyre = "0.6"
 color-eyre = "0.5"
 gpu-alloc-mock = { path = "../mock", version = "=0.2", optional = true }
@@ -48,6 +47,6 @@ path = "src/ash.rs"
 required-features = ["gpu-alloc-ash", "ash"]
 
 [[bin]]
-name = "linear-reuse"
-path = "src/linear_reuse.rs"
+name = "transient-reuse"
+path = "src/transient_reuse.rs"
 required-features = ["mock"]

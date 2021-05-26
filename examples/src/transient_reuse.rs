@@ -27,7 +27,7 @@ fn main() -> eyre::Result<()> {
         memory_heaps: Cow::Borrowed(&[MemoryHeap {
             size: 32 * 1024 * 1024,
         }]),
-        max_memory_allocation_count: if cfg!(feature = "freelist") { 1 } else { 2 },
+        max_memory_allocation_count: 5,
         max_memory_allocation_size: 1024 * 1024,
         non_coherent_atom_size: 8,
         buffer_device_address: false,
@@ -40,7 +40,7 @@ fn main() -> eyre::Result<()> {
     let mut blocks = VecDeque::new();
 
     for _ in 0..1_000_000 {
-        if blocks.len() > 1000 {
+        if blocks.len() >= 1024 {
             while blocks.len() > 700 {
                 let block = blocks.pop_front().unwrap();
 
@@ -54,7 +54,7 @@ fn main() -> eyre::Result<()> {
             allocator.alloc(
                 &device,
                 Request {
-                    size: 100,
+                    size: 128,
                     align_mask: 0,
                     usage: UsageFlags::HOST_ACCESS | UsageFlags::TRANSIENT,
                     memory_types: !0,
@@ -73,10 +73,14 @@ fn main() -> eyre::Result<()> {
 
     // assert_eq!(device.total_allocations(), 2);
 
-    tracing::info!(
+    tracing::warn!(
         "Total memory object allocations: {}",
         device.total_allocations()
     );
+
+    unsafe {
+        allocator.cleanup(&device);
+    }
 
     Ok(())
 }
