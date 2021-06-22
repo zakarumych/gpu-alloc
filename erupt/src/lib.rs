@@ -5,7 +5,7 @@
 //!
 //! ```ignore
 //! use {
-//!     erupt::{vk1_0, DefaultEntryLoader, DeviceLoader, InstanceLoader},
+//!     erupt::{vk1_0, DeviceLoader, EntryLoader, InstanceLoader},
 //!     gpu_alloc::{Config, GpuAllocator, Request, UsageFlags},
 //!     gpu_alloc_erupt::{device_properties, EruptMemoryDevice},
 //!     std::ffi::CStr,
@@ -14,39 +14,43 @@
 //! fn main() -> eyre::Result<()> {
 //!     color_eyre::install()?;
 //!
-//!     let entry = DefaultEntryLoader::new()?;
+//!     let entry = EntryLoader::new()?;
 //!
-//!     let instance = InstanceLoader::new(
-//!         &entry,
-//!         &vk1_0::InstanceCreateInfo::default()
-//!             .into_builder()
-//!             .application_info(
-//!                 &vk1_0::ApplicationInfo::default()
-//!                     .into_builder()
-//!                     .engine_name(CStr::from_bytes_with_nul(b"GpuAlloc\0").unwrap())
-//!                     .engine_version(1)
-//!                     .application_name(CStr::from_bytes_with_nul(b"GpuAllocApp\0").unwrap())
-//!                     .application_version(1)
-//!                     .api_version(entry.instance_version()),
-//!             ),
-//!         None,
-//!     )?;
+//!     let instance = unsafe {
+//!         InstanceLoader::new(
+//!             &entry,
+//!             &vk1_0::InstanceCreateInfo::default()
+//!                 .into_builder()
+//!                 .application_info(
+//!                     &vk1_0::ApplicationInfo::default()
+//!                         .into_builder()
+//!                         .engine_name(CStr::from_bytes_with_nul(b"GpuAlloc\0").unwrap())
+//!                         .engine_version(1)
+//!                         .application_name(CStr::from_bytes_with_nul(b"GpuAllocApp\0").unwrap())
+//!                         .application_version(1)
+//!                         .api_version(entry.instance_version()),
+//!                 ),
+//!             None,
+//!         )
+//!     }?;
 //!
 //!     let physical_devices = unsafe { instance.enumerate_physical_devices(None) }.result()?;
 //!     let physical_device = physical_devices[0];
 //!
 //!     let props = unsafe { device_properties(&instance, physical_device) }?;
 //!
-//!     let device = DeviceLoader::new(
-//!         &instance,
-//!         physical_device,
-//!         &vk1_0::DeviceCreateInfoBuilder::new().queue_create_infos(&[
-//!             vk1_0::DeviceQueueCreateInfoBuilder::new()
-//!                 .queue_family_index(0)
-//!                 .queue_priorities(&[0f32]),
-//!         ]),
-//!         None,
-//!     )?;
+//!     let device = unsafe {
+//!         DeviceLoader::new(
+//!             &instance,
+//!             physical_device,
+//!             &vk1_0::DeviceCreateInfoBuilder::new().queue_create_infos(&[
+//!                 vk1_0::DeviceQueueCreateInfoBuilder::new()
+//!                     .queue_family_index(0)
+//!                     .queue_priorities(&[0f32]),
+//!             ]),
+//!             None,
+//!         )
+//!     }?;
 //!
 //!     let config = Config::i_am_potato();
 //!
