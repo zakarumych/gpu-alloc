@@ -377,26 +377,37 @@ where
         allocations_remains: &mut u32,
     ) -> Result<FreeListBlock<M>, AllocationError> {
         debug_assert!(
-            self.chunk_size >= size,
+            self.final_chunk_size >= size,
             "GpuAllocator must not request allocations equal or greater to chunks size"
         );
 
         let size = align_up(size, self.atom_mask).expect(
-            "Any value not greater than chunk size (which is aligned) has to fit for alignment",
+            "Any value not greater than final chunk size (which is aligned) has to fit for alignment",
         );
 
         let align_mask = align_mask | self.atom_mask;
         let host_visible = self.host_visible();
 
-        if let Some(block) = self.freelist.get_block(align_mask, size) {
-            self.total_allocations += 1;
-            return Ok(block);
+        if size <= self.chunk_size {
+            // Otherwise there can't be any sufficiently large free blocks
+            if let Some(block) = self.freelist.get_block(align_mask, size) {
+                self.total_allocations += 1;
+                return Ok(block);
+            }
         }
 
         // New allocation is required.
         if *allocations_remains == 0 {
             return Err(AllocationError::TooManyObjects);
         }
+
+        if size > self.chunk_size {
+            let multiple = (size - 1) / self.chunk_size + 1;
+            let multiple = multiple.next_power_of_two();
+
+            self.chunk_size = (self.chunk_size * multiple).min(self.final_chunk_size);
+        }
+
         let mut memory = device.allocate_memory(self.chunk_size, self.memory_type, flags)?;
         *allocations_remains -= 1;
         heap.alloc(self.chunk_size);
