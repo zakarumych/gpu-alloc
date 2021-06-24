@@ -441,8 +441,6 @@ where
             self.freelist
                 .get_block_from_new_memory(memory, self.chunk_size, ptr, align_mask, size);
 
-        dbg!("Allocated memory of size", self.chunk_size);
-
         if self.chunk_size < self.final_chunk_size {
             // Double next chunk size
             // Limit to final value.
@@ -468,8 +466,6 @@ where
 
         if let Some(memory) = self.freelist.drain(true) {
             memory.for_each(|(memory, size)| {
-                dbg!("Freed memory of size", size);
-
                 device.deallocate_memory(memory);
                 *allocations_remains += 1;
                 heap.dealloc(size);
@@ -494,8 +490,6 @@ where
     ) {
         if let Some(memory) = self.freelist.drain(false) {
             memory.for_each(|(memory, size)| {
-                dbg!("Freed memory of size", size);
-
                 device.deallocate_memory(memory);
                 *allocations_remains += 1;
                 heap.dealloc(size);

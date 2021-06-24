@@ -285,18 +285,15 @@ where
                             };
 
                             let final_free_list_chunk = match align_down(
-                                dbg!(self.final_free_list_chunk)
-                                    .max(dbg!(self.starting_free_list_chunk))
-                                    .max(dbg!(self.transient_dedicated_threshold))
-                                    .min(dbg!(heap.size() / 32)),
+                                self.final_free_list_chunk
+                                    .max(self.starting_free_list_chunk)
+                                    .max(self.transient_dedicated_threshold)
+                                    .min(heap.size() / 32),
                                 atom_mask,
                             ) {
                                 0 => atom_mask,
                                 other => other,
                             };
-
-                            dbg!(starting_free_list_chunk);
-                            dbg!(final_free_list_chunk);
 
                             slot.get_or_insert(FreeListAllocator::new(
                                 starting_free_list_chunk,
