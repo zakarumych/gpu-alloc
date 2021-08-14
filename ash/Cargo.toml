@@ -15,5 +15,5 @@ categories = ["graphics", "memory-management", "no-std", "game-development"]
 [dependencies]
 gpu-alloc-types = { path = "../types", version = "0.2" }
 tracing = { version = "0.1", features = ["attributes"], optional = true }
-ash = { version = "0.32", default-features = false }
+ash = { version = "0.33", default-features = false }
 tinyvec = { version = "1.0",  default-features = false, features = ["alloc"] }

@@ -81,7 +81,6 @@
 
 use {
     ash::{
-        version::{DeviceV1_0 as _, InstanceV1_0 as _, InstanceV1_1 as _},
         vk, Device, Instance,
     },
     gpu_alloc_types::{
@@ -244,7 +243,7 @@ pub unsafe fn device_properties(
     let memory_properties = instance.get_physical_device_memory_properties(physical_device);
 
     let buffer_device_address =
-        if vk::version_major(version) >= 1 && vk::version_minor(version) >= 2 {
+        if vk::api_version_major(version) >= 1 && vk::api_version_minor(version) >= 2 {
             let mut features = PhysicalDeviceFeatures2::builder();
             let mut bda_features = vk::PhysicalDeviceBufferDeviceAddressFeatures::default();
             features.p_next =
