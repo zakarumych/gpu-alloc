@@ -80,9 +80,7 @@
 //!
 
 use {
-    ash::{
-        vk, Device, Instance,
-    },
+    ash::{vk, Device, Instance},
     gpu_alloc_types::{
         AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
         MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
