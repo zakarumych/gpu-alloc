@@ -1,6 +1,6 @@
 [package]
 name = "gpu-alloc-ash"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 description = "`ash` backend for `gfx-alloc`"
