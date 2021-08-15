@@ -116,7 +116,7 @@ impl<M> FreeList<M> {
                     if next.is_prefix_block(&block) {
                         next.merge_prefix_block(block);
 
-                        if prev.consecutive(&next) {
+                        if prev.consecutive(&*next) {
                             let next = self.array.remove(index);
                             let prev = &mut self.array[index - 1];
                             prev.merge(next);
@@ -498,16 +498,15 @@ where
 
         #[cfg(feature = "tracing")]
         {
-            if self.total_allocations == self.total_deallocations {
-                if !self.freelist.array.is_empty() {
-                    tracing::error!(
-                        "Some regions were not deallocated on cleanup, although all blocks are free.
+            if self.total_allocations == self.total_deallocations && !self.freelist.array.is_empty()
+            {
+                tracing::error!(
+                    "Some regions were not deallocated on cleanup, although all blocks are free.
                         This is a bug in `FreeBlockAllocator`.
                         See array of free blocks left:
                         {:#?}",
-                        self.freelist.array,
-                    );
-                }
+                    self.freelist.array,
+                );
             }
         }
     }

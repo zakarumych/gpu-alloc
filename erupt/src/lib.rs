@@ -122,12 +122,12 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
             .allocation_size(size)
             .memory_type_index(memory_type);
 
-        let mut info_flags;
+        let info_flags;
 
         if flags.contains(AllocationFlags::DEVICE_ADDRESS) {
             info_flags = vk1_1::MemoryAllocateFlagsInfoBuilder::new()
                 .flags(vk1_1::MemoryAllocateFlags::DEVICE_ADDRESS);
-            info = info.extend_from(&mut info_flags);
+            info = info.extend_from(&info_flags);
         }
 
         match self.device.allocate_memory(&info, None).result() {
