@@ -1,8 +1,5 @@
 use {
-    ash::{
-        version::{EntryV1_0, InstanceV1_0},
-        vk, Entry,
-    },
+    ash::{vk, Entry},
     gpu_alloc::{Config, GpuAllocator, Request, UsageFlags},
     gpu_alloc_ash::{device_properties, AshMemoryDevice},
     std::ffi::CStr,
@@ -15,7 +12,7 @@ fn main() -> eyre::Result<()> {
 
     let version = entry
         .try_enumerate_instance_version()?
-        .unwrap_or(vk::make_version(1, 0, 0));
+        .unwrap_or(vk::make_api_version(0, 1, 0, 0));
 
     let instance = unsafe {
         entry.create_instance(
