@@ -10,7 +10,7 @@ mock = ["gpu-alloc-mock"]
 gfx = ["gpu-alloc-gfx"]
 
 [dependencies]
-gpu-alloc = { path = "../gpu-alloc", version = "=0.5.1", features = ["tracing"] }
+gpu-alloc = { path = "../gpu-alloc", version = "=0.5.2", features = ["tracing"] }
 eyre = "0.6"
 color-eyre = "0.5"
 gpu-alloc-mock = { path = "../mock", version = "=0.2", optional = true }
