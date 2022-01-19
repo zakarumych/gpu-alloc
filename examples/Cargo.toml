@@ -7,20 +7,16 @@ publish = false
 
 [features]
 mock = ["gpu-alloc-mock"]
-gfx = ["gpu-alloc-gfx"]
 
 [dependencies]
-gpu-alloc = { path = "../gpu-alloc", version = "=0.5.2", features = ["tracing"] }
+gpu-alloc = { path = "../gpu-alloc", version = "=0.5.3", features = ["tracing"] }
 eyre = "0.6"
-color-eyre = "0.5"
+color-eyre = "0.6"
 gpu-alloc-mock = { path = "../mock", version = "=0.2", optional = true }
-gpu-alloc-gfx = { path = "../gfx", version = "=0.3", optional = true }
-gfx-hal = { version = "0.8", optional = true }
-gfx-backend-vulkan = { version = "0.8", optional = true }
-gpu-alloc-erupt = { path = "../erupt", version = "=0.5", optional = true }
-erupt = { version = "0.19", optional = true, features = ["loading"] }
-gpu-alloc-ash = { path = "../ash", version = "=0.2", optional = true }
-ash = { version = "0.33", default-features = false, features = ["libloading"], optional = true }
+gpu-alloc-erupt = { path = "../erupt", version = "=0.6", optional = true }
+erupt = { version = "0.21", optional = true, features = ["loading"] }
+gpu-alloc-ash = { path = "../ash", version = "=0.3", optional = true }
+ash = { version = "0.35", default-features = false, features = ["loaded"], optional = true }
 
 tracing-subscriber = { version = "0.2", features = ["fmt", "env-filter"] }
 tracing-error = { version = "0.1" }
@@ -30,11 +26,6 @@ tracing = { version = "0.1" }
 name = "mock"
 path = "src/mock.rs"
 required-features = ["mock"]
-
-[[bin]]
-name = "gfx"
-path = "src/gfx.rs"
-required-features = ["gfx", "gfx-hal", "gfx-backend-vulkan"]
 
 [[bin]]
 name = "erupt"

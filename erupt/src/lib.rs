@@ -83,15 +83,14 @@
 //! ```
 //!
 
-use {
-    erupt::{vk1_0, vk1_1, DeviceLoader, ExtendableFromConst, InstanceLoader},
-    gpu_alloc_types::{
-        AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice,
-        MemoryHeap, MemoryPropertyFlags, MemoryType, OutOfMemory,
-    },
-    std::ptr::NonNull,
-    tinyvec::TinyVec,
+use std::ptr::NonNull;
+
+use erupt::{vk::MemoryMapFlags, vk1_0, vk1_1, DeviceLoader, ExtendableFrom, InstanceLoader};
+use gpu_alloc_types::{
+    AllocationFlags, DeviceMapError, DeviceProperties, MappedMemoryRange, MemoryDevice, MemoryHeap,
+    MemoryPropertyFlags, MemoryType, OutOfMemory,
 };
+use tinyvec::TinyVec;
 
 #[repr(transparent)]
 pub struct EruptMemoryDevice {
@@ -122,12 +121,12 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
             .allocation_size(size)
             .memory_type_index(memory_type);
 
-        let info_flags;
+        let mut info_flags;
 
         if flags.contains(AllocationFlags::DEVICE_ADDRESS) {
             info_flags = vk1_1::MemoryAllocateFlagsInfoBuilder::new()
                 .flags(vk1_1::MemoryAllocateFlags::DEVICE_ADDRESS);
-            info = info.extend_from(&info_flags);
+            info = info.extend_from(&mut info_flags);
         }
 
         match self.device.allocate_memory(&info, None).result() {
@@ -141,7 +140,7 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     unsafe fn deallocate_memory(&self, memory: vk1_0::DeviceMemory) {
-        self.device.free_memory(Some(memory), None);
+        self.device.free_memory(memory, None);
     }
 
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
@@ -151,14 +150,12 @@ impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
         offset: u64,
         size: u64,
     ) -> Result<NonNull<u8>, DeviceMapError> {
-        let mut ptr = core::ptr::null_mut();
-
         match self
             .device
-            .map_memory(*memory, offset, size, None, &mut ptr)
+            .map_memory(*memory, offset, size, MemoryMapFlags::empty())
             .result()
         {
-            Ok(()) => {
+            Ok(ptr) => {
                 Ok(NonNull::new(ptr as *mut u8)
                     .expect("Pointer to memory mapping must not be null"))
             }
@@ -244,7 +241,6 @@ pub unsafe fn device_properties(
         erupt::{
             extensions::khr_buffer_device_address::KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
             vk1_1::PhysicalDeviceFeatures2, vk1_2::PhysicalDeviceBufferDeviceAddressFeatures,
-            ExtendableFromMut,
         },
         std::ffi::CStr,
     };
@@ -255,42 +251,44 @@ pub unsafe fn device_properties(
 
     let memory_properties = instance.get_physical_device_memory_properties(physical_device);
 
-    let buffer_device_address =
-        if instance.enabled().vk1_1 || instance.enabled().khr_get_physical_device_properties2 {
-            let mut bda_features_available = instance.enabled().vk1_2;
+    let buffer_device_address = if instance.enabled().vk1_1
+        || instance.enabled().khr_get_physical_device_properties2
+    {
+        let mut bda_features_available = instance.enabled().vk1_2;
 
-            if !bda_features_available {
-                let extensions = instance
-                    .enumerate_device_extension_properties(physical_device, None, None)
-                    .result()?;
+        if !bda_features_available {
+            let extensions = instance
+                .enumerate_device_extension_properties(physical_device, None, None)
+                .result()?;
 
-                bda_features_available = extensions.iter().any(|ext| {
-                    let name = CStr::from_bytes_with_nul({
-                        std::slice::from_raw_parts(
-                            ext.extension_name.as_ptr() as *const _,
-                            ext.extension_name.len(),
-                        )
-                    });
-                    if let Ok(name) = name {
-                        name == { CStr::from_ptr(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) }
-                    } else {
-                        false
-                    }
+            bda_features_available = extensions.iter().any(|ext| {
+                let name = CStr::from_bytes_with_nul({
+                    std::slice::from_raw_parts(
+                        ext.extension_name.as_ptr() as *const _,
+                        ext.extension_name.len(),
+                    )
                 });
-            }
+                if let Ok(name) = name {
+                    name == { CStr::from_ptr(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) }
+                } else {
+                    false
+                }
+            });
+        }
 
-            if bda_features_available {
-                let features = PhysicalDeviceFeatures2::default().into_builder();
-                let mut bda_features = PhysicalDeviceBufferDeviceAddressFeatures::default();
-                let features = features.extend_from(&mut bda_features);
-                instance.get_physical_device_features2(physical_device, Some(features.build()));
-                bda_features.buffer_device_address != 0
-            } else {
-                false
-            }
+        if bda_features_available {
+            let features = PhysicalDeviceFeatures2::default().into_builder();
+            let mut bda_features = PhysicalDeviceBufferDeviceAddressFeatures::default();
+            let features = features.extend_from(&mut bda_features);
+            instance
+                .get_physical_device_features2(physical_device, Some(features.build_dangling()));
+            bda_features.buffer_device_address != 0
         } else {
             false
-        };
+        }
+    } else {
+        false
+    };
 
     Ok(DeviceProperties {
         max_memory_allocation_count: limits.max_memory_allocation_count,

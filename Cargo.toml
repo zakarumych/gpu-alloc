@@ -1,2 +1,2 @@
 [workspace]
-members = ["types", "gpu-alloc", "mock", "gfx", "erupt", "examples", "ash"]
+members = ["types", "gpu-alloc", "mock", "erupt", "examples", "ash"]

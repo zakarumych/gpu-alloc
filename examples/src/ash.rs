@@ -8,7 +8,7 @@ use {
 fn main() -> eyre::Result<()> {
     color_eyre::install()?;
 
-    let entry = unsafe { Entry::new() }?;
+    let entry = unsafe { Entry::load() }?;
 
     let version = entry
         .try_enumerate_instance_version()?

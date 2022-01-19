@@ -24,7 +24,6 @@ fn main() -> eyre::Result<()> {
                         .application_version(1)
                         .api_version(entry.instance_version()),
                 ),
-            None,
         )
     }?;
 
@@ -42,7 +41,6 @@ fn main() -> eyre::Result<()> {
                     .queue_family_index(0)
                     .queue_priorities(&[0f32]),
             ]),
-            None,
         )
     }?;
 

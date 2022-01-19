@@ -1,9 +1,9 @@
 [package]
 name = "gpu-alloc-ash"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
-description = "`ash` backend for `gfx-alloc`"
+description = "`ash` backend for `gpu-alloc`"
 documentation = "https://docs.rs/gpu-alloc-ash"
 readme = "../README.md"
 homepage = "https://github.com/zakarumych/gpu-alloc"
@@ -15,5 +15,5 @@ categories = ["graphics", "memory-management", "no-std", "game-development"]
 [dependencies]
 gpu-alloc-types = { path = "../types", version = "0.2" }
 tracing = { version = "0.1", features = ["attributes"], optional = true }
-ash = { version = "0.33", default-features = false }
+ash = { version = "0.35", default-features = false }
 tinyvec = { version = "1.0",  default-features = false, features = ["alloc"] }
