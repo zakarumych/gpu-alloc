@@ -20,7 +20,7 @@ jobs:
       matrix:
         rust-toolchain: [stable, nightly]
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install ${{ matrix.rust-toolchain }} toolchain
       uses: actions-rs/toolchain@v1
       with:
@@ -34,7 +34,7 @@ jobs:
   test-1_46:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - name: Install 1.46.0 toolchain
       uses: actions-rs/toolchain@v1
       with:
