@@ -469,6 +469,25 @@ where
         }
     }
 
+    /// Returns the number of remaining available allocations.
+    ///
+    /// This may be useful if you need know if the allocator can allocate a number of allocations ahead of
+    /// time. This function is also useful for ensuring you do not allocate too much memory outside allocator
+    /// (such as external memory). 
+    pub fn remaining_allocations(&self) -> u32 {
+        self.allocations_remains
+    }
+
+    /// Sets the number of remaining available allocations.
+    ///
+    /// # Safety
+    ///
+    /// The caller is responsible for ensuring the number of remaining allocations does not exceed how many
+    /// remaining allocations there actually are on the memory device. 
+    pub unsafe fn set_remaining_allocations(&mut self, remaining: u32) {
+        self.allocations_remains = remaining;
+    }
+
     /// Deallocates leftover memory objects.
     /// Should be used before dropping.
     ///
