@@ -107,6 +107,18 @@ impl EruptMemoryDevice {
     }
 }
 
+impl AsRef<EruptMemoryDevice> for DeviceLoader {
+    fn as_ref(&self) -> &EruptMemoryDevice {
+        EruptMemoryDevice::wrap(self)
+    }
+}
+
+impl AsRef<EruptMemoryDevice> for EruptMemoryDevice {
+    fn as_ref(&self) -> &EruptMemoryDevice {
+        self
+    }
+}
+
 impl MemoryDevice<vk1_0::DeviceMemory> for EruptMemoryDevice {
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self)))]
     unsafe fn allocate_memory(
