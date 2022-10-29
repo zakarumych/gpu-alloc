@@ -122,12 +122,12 @@ where
     /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
     ///   and memory blocks allocated from it.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
-    pub unsafe fn alloc(
+    pub unsafe fn alloc<MD: MemoryDevice<M>>(
         &mut self,
-        device: &impl MemoryDevice<M>,
+        device: &impl AsRef<MD>,
         request: Request,
     ) -> Result<MemoryBlock<M>, AllocationError> {
-        self.alloc_internal(device, request, None)
+        self.alloc_internal(device.as_ref(), request, None)
     }
 
     /// Allocates memory block from specified `device` according to the `request`.
@@ -141,13 +141,13 @@ where
     /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
     ///   and memory blocks allocated from it.
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
-    pub unsafe fn alloc_with_dedicated(
+    pub unsafe fn alloc_with_dedicated<MD: MemoryDevice<M>>(
         &mut self,
-        device: &impl MemoryDevice<M>,
+        device: &impl AsRef<MD>,
         request: Request,
         dedicated: Dedicated,
     ) -> Result<MemoryBlock<M>, AllocationError> {
-        self.alloc_internal(device, request, Some(dedicated))
+        self.alloc_internal(device.as_ref(), request, Some(dedicated))
     }
 
     unsafe fn alloc_internal(
@@ -483,7 +483,8 @@ where
     /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
     ///   and memory blocks allocated from it
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
-    pub unsafe fn dealloc(&mut self, device: &impl MemoryDevice<M>, block: MemoryBlock<M>) {
+    pub unsafe fn dealloc<MD: MemoryDevice<M>>(&mut self, device: &impl AsRef<MD>, block: MemoryBlock<M>) {
+        let device = device.as_ref();
         let memory_type = block.memory_type();
         let offset = block.offset();
         let size = block.size();
@@ -579,13 +580,14 @@ where
     /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
     ///   and memory blocks allocated from it
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
-    pub unsafe fn cleanup(&mut self, device: &impl MemoryDevice<M>) {
+    pub unsafe fn cleanup<MD: MemoryDevice<M>>(&mut self, device: &impl AsRef<MD>) {
         for (index, allocator) in self
             .freelist_allocators
             .iter_mut()
             .enumerate()
             .filter_map(|(index, allocator)| Some((index, allocator.as_mut()?)))
         {
+            let device = device.as_ref();
             let memory_type = &self.memory_types[index];
             let heap = memory_type.heap;
             let heap = &mut self.memory_heaps[heap as usize];
