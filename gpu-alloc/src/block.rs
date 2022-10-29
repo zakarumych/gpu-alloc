@@ -135,9 +135,9 @@ impl<M> MemoryBlock<M> {
     ///
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
-    pub unsafe fn map(
+    pub unsafe fn map<MD: MemoryDevice<M>>(
         &mut self,
-        device: &impl MemoryDevice<M>,
+        device: &impl AsRef<MD>,
         offset: u64,
         size: usize,
     ) -> Result<NonNull<u8>, MapError> {
@@ -158,7 +158,7 @@ impl<M> MemoryBlock<M> {
                     return Err(MapError::AlreadyMapped);
                 }
                 let result =
-                    device.map_memory(memory, self.offset + aligned_offset, end - aligned_offset);
+                    device.as_ref().map_memory(memory, self.offset + aligned_offset, end - aligned_offset);
 
                 match result {
                     // the overflow is checked in `Self::new()`
@@ -198,13 +198,13 @@ impl<M> MemoryBlock<M> {
     ///
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
-    pub unsafe fn unmap(&mut self, device: &impl MemoryDevice<M>) -> bool {
+    pub unsafe fn unmap<MD: MemoryDevice<M>>(&mut self, device: &impl AsRef<MD>) -> bool {
         if !release_mapping(&mut self.mapped) {
             return false;
         }
         match &mut self.flavor {
             MemoryBlockFlavor::Dedicated { memory } => {
-                device.unmap_memory(memory);
+                device.as_ref().unmap_memory(memory);
             }
             MemoryBlockFlavor::Buddy { .. } => {}
             MemoryBlockFlavor::FreeList { .. } => {}
@@ -224,9 +224,9 @@ impl<M> MemoryBlock<M> {
     /// `block` must have been allocated from specified `device`.
     /// The caller must guarantee that any previously submitted command that reads or writes to this range has completed.
     #[inline(always)]
-    pub unsafe fn write_bytes(
+    pub unsafe fn write_bytes<MD: MemoryDevice<M>>(
         &mut self,
-        device: &impl MemoryDevice<M>,
+        device: &impl AsRef<MD>,
         offset: u64,
         data: &[u8],
     ) -> Result<(), MapError> {
@@ -238,7 +238,7 @@ impl<M> MemoryBlock<M> {
             let aligned_offset = align_down(offset, self.atom_mask);
             let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
-            device.flush_memory_ranges(&[MappedMemoryRange {
+            device.as_ref().flush_memory_ranges(&[MappedMemoryRange {
                 memory: self.memory(),
                 offset: self.offset + aligned_offset,
                 size: end - aligned_offset,
@@ -263,9 +263,9 @@ impl<M> MemoryBlock<M> {
     /// `block` must have been allocated from specified `device`.
     /// The caller must guarantee that any previously submitted command that reads to this range has completed.
     #[inline(always)]
-    pub unsafe fn read_bytes(
+    pub unsafe fn read_bytes<MD: MemoryDevice<M>>(
         &mut self,
-        device: &impl MemoryDevice<M>,
+        device: &impl AsRef<MD>,
         offset: u64,
         data: &mut [u8],
     ) -> Result<(), MapError> {
@@ -282,7 +282,7 @@ impl<M> MemoryBlock<M> {
             let aligned_offset = align_down(offset, self.atom_mask);
             let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
 
-            device.invalidate_memory_ranges(&[MappedMemoryRange {
+            device.as_ref().invalidate_memory_ranges(&[MappedMemoryRange {
                 memory: self.memory(),
                 offset: self.offset + aligned_offset,
                 size: end - aligned_offset,
