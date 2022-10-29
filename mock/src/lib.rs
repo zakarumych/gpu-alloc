@@ -289,3 +289,11 @@ impl MemoryDevice<usize> for MockMemoryDevice {
         Ok(())
     }
 }
+
+// MockMemoryDevice is not a wrapper for external type in other crate,
+// this impl is needed to be compatible with the new signature of GpuAllocator.
+impl AsRef<MockMemoryDevice> for MockMemoryDevice {
+    fn as_ref(&self) -> &MockMemoryDevice {
+        self
+    }
+}
