@@ -135,12 +135,15 @@ impl<M> MemoryBlock<M> {
     ///
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
-    pub unsafe fn map<MD: MemoryDevice<M>>(
+    pub unsafe fn map<MD>(
         &mut self,
         device: &impl AsRef<MD>,
         offset: u64,
         size: usize,
-    ) -> Result<NonNull<u8>, MapError> {
+    ) -> Result<NonNull<u8>, MapError>
+    where
+        MD: MemoryDevice<M>,
+    {
         let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
         assert!(offset < self.size, "`offset` is out of memory block bounds");
         assert!(
@@ -198,7 +201,10 @@ impl<M> MemoryBlock<M> {
     ///
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
-    pub unsafe fn unmap<MD: MemoryDevice<M>>(&mut self, device: &impl AsRef<MD>) -> bool {
+    pub unsafe fn unmap<MD>(&mut self, device: &impl AsRef<MD>) -> bool
+    where
+        MD: MemoryDevice<M>,
+    {
         if !release_mapping(&mut self.mapped) {
             return false;
         }
@@ -224,12 +230,15 @@ impl<M> MemoryBlock<M> {
     /// `block` must have been allocated from specified `device`.
     /// The caller must guarantee that any previously submitted command that reads or writes to this range has completed.
     #[inline(always)]
-    pub unsafe fn write_bytes<MD: MemoryDevice<M>>(
+    pub unsafe fn write_bytes<MD>(
         &mut self,
         device: &impl AsRef<MD>,
         offset: u64,
         data: &[u8],
-    ) -> Result<(), MapError> {
+    ) -> Result<(), MapError>
+    where
+        MD: MemoryDevice<M>,
+    {
         let size = data.len();
         let ptr = self.map(device, offset, size)?;
 
@@ -263,12 +272,15 @@ impl<M> MemoryBlock<M> {
     /// `block` must have been allocated from specified `device`.
     /// The caller must guarantee that any previously submitted command that reads to this range has completed.
     #[inline(always)]
-    pub unsafe fn read_bytes<MD: MemoryDevice<M>>(
+    pub unsafe fn read_bytes<MD>(
         &mut self,
         device: &impl AsRef<MD>,
         offset: u64,
         data: &mut [u8],
-    ) -> Result<(), MapError> {
+    ) -> Result<(), MapError>
+    where
+        MD: MemoryDevice<M>,
+    {
         #[cfg(feature = "tracing")]
         {
             if !self.cached() {
