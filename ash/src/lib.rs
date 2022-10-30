@@ -105,6 +105,7 @@ impl AshMemoryDevice {
 }
 
 impl AsRef<AshMemoryDevice> for Device {
+    #[inline(always)]
     fn as_ref(&self) -> &AshMemoryDevice {
         AshMemoryDevice::wrap(self)
     }
@@ -113,6 +114,7 @@ impl AsRef<AshMemoryDevice> for Device {
 // AsRef does not have a blanket implementation. need to add this impl so that
 // old user code (i.e. explicit wrap) still compiles without any change
 impl AsRef<AshMemoryDevice> for AshMemoryDevice {
+    #[inline(always)]
     fn as_ref(&self) -> &AshMemoryDevice {
         self
     }
