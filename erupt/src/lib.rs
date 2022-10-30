@@ -108,12 +108,14 @@ impl EruptMemoryDevice {
 }
 
 impl AsRef<EruptMemoryDevice> for DeviceLoader {
+    #[inline(always)]
     fn as_ref(&self) -> &EruptMemoryDevice {
         EruptMemoryDevice::wrap(self)
     }
 }
 
 impl AsRef<EruptMemoryDevice> for EruptMemoryDevice {
+    #[inline(always)]
     fn as_ref(&self) -> &EruptMemoryDevice {
         self
     }
