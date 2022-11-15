@@ -14,7 +14,7 @@ eyre = "0.6"
 color-eyre = "0.6"
 gpu-alloc-mock = { path = "../mock", version = "=0.2", optional = true }
 gpu-alloc-erupt = { path = "../erupt", version = "=0.7", optional = true }
-erupt = { version = "0.22", optional = true, features = ["loading"] }
+erupt = { version = "0.23", optional = true, features = ["loading"] }
 gpu-alloc-ash = { path = "../ash", version = "=0.5", optional = true }
 ash = { version = "0.37", default-features = false, features = ["loaded"], optional = true }
 
