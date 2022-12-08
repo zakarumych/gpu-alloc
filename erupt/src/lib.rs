@@ -251,44 +251,42 @@ pub unsafe fn device_properties(
 
     let memory_properties = instance.get_physical_device_memory_properties(physical_device);
 
-    let buffer_device_address = if instance.enabled().vk1_1
-        || instance.enabled().khr_get_physical_device_properties2
-    {
-        let mut bda_features_available = instance.enabled().vk1_2;
+    let buffer_device_address =
+        if instance.enabled().vk1_1 || instance.enabled().khr_get_physical_device_properties2 {
+            let mut bda_features_available = instance.enabled().vk1_2;
 
-        if !bda_features_available {
-            let extensions = instance
-                .enumerate_device_extension_properties(physical_device, None, None)
-                .result()?;
+            if !bda_features_available {
+                let extensions = instance
+                    .enumerate_device_extension_properties(physical_device, None, None)
+                    .result()?;
 
-            bda_features_available = extensions.iter().any(|ext| {
-                let name = CStr::from_bytes_with_nul({
-                    std::slice::from_raw_parts(
-                        ext.extension_name.as_ptr() as *const _,
-                        ext.extension_name.len(),
-                    )
+                bda_features_available = extensions.iter().any(|ext| {
+                    let name = CStr::from_bytes_with_nul({
+                        std::slice::from_raw_parts(
+                            ext.extension_name.as_ptr() as *const _,
+                            ext.extension_name.len(),
+                        )
+                    });
+                    if let Ok(name) = name {
+                        name == { CStr::from_ptr(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) }
+                    } else {
+                        false
+                    }
                 });
-                if let Ok(name) = name {
-                    name == { CStr::from_ptr(KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) }
-                } else {
-                    false
-                }
-            });
-        }
+            }
 
-        if bda_features_available {
-            let features = PhysicalDeviceFeatures2::default().into_builder();
-            let mut bda_features = PhysicalDeviceBufferDeviceAddressFeatures::default();
-            let features = features.extend_from(&mut bda_features);
-            instance
-                .get_physical_device_features2(physical_device, Some(features.build_dangling()));
-            bda_features.buffer_device_address != 0
+            if bda_features_available {
+                let features = PhysicalDeviceFeatures2::default().into_builder();
+                let mut bda_features = PhysicalDeviceBufferDeviceAddressFeatures::default();
+                let mut features = features.extend_from(&mut bda_features);
+                instance.get_physical_device_features2(physical_device, &mut features);
+                bda_features.buffer_device_address != 0
+            } else {
+                false
+            }
         } else {
             false
-        }
-    } else {
-        false
-    };
+        };
 
     Ok(DeviceProperties {
         max_memory_allocation_count: limits.max_memory_allocation_count,
