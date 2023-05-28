@@ -212,7 +212,7 @@ impl MemoryDevice<usize> for MockMemoryDevice {
                 tracing::warn!("Invalidating host-coherent memory");
             }
 
-            let mapped_size = (&*mapped.content.get()).len() as u64;
+            let mapped_size = (*mapped.content.get()).len() as u64;
 
             assert!(
                 range.offset >= mapped.offset,
@@ -261,7 +261,7 @@ impl MemoryDevice<usize> for MockMemoryDevice {
                 tracing::warn!("Invalidating host-coherent memory");
             }
 
-            let mapped_size = (&*mapped.content.get()).len() as u64;
+            let mapped_size = (*mapped.content.get()).len() as u64;
 
             assert!(
                 range.offset >= mapped.offset,
