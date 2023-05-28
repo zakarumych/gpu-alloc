@@ -67,6 +67,7 @@ pub struct DeviceProperties<'a> {
 bitflags::bitflags! {
     /// Allocation flags
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct AllocationFlags : u8 {
         /// Specifies that the memory can be used for buffers created
         /// with flag that allows fetching device address.

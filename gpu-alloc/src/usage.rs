@@ -7,6 +7,7 @@ bitflags::bitflags! {
     /// Memory usage type.
     /// Bits set define intended usage for requested memory.
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct UsageFlags: u8 {
         /// Hints for allocator to find memory with faster device access.
         /// If no flags is specified than `FAST_DEVICE_ACCESS` is implied.

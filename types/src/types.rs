@@ -1,6 +1,7 @@
 bitflags::bitflags! {
     /// Memory properties type.
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct MemoryPropertyFlags: u8 {
         /// This flag is set for device-local memory types.
         /// Device-local memory is situated "close" to the GPU cores
