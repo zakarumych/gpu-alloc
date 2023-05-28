@@ -31,15 +31,15 @@ jobs:
       with:
         command: test
         args: --all --all-features
-  test-1_46:
+  test-1_60:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Install 1.46.0 toolchain
+    - name: Install 1.60.0 toolchain
       uses: actions-rs/toolchain@v1
       with:
         profile: minimal
-        toolchain: '1.46.0'
+        toolchain: '1.60.0'
     - name: Run cargo test
       uses: actions-rs/cargo@v1
       with:
