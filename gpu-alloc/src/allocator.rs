@@ -202,6 +202,11 @@ where
             let heap = memory_type.heap;
             let heap = &mut self.memory_heaps[heap as usize];
 
+            if request.size > heap.size() {
+                // Impossible to use memory type from this heap.
+                continue;
+            }
+
             let atom_mask = if host_visible_non_coherent(memory_type.props) {
                 self.non_coherent_atom_mask
             } else {
