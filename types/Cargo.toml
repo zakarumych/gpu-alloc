@@ -1,6 +1,6 @@
 [package]
 name = "gpu-alloc-types"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 description = "Core types of gpu-alloc crate"

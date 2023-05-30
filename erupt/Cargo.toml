@@ -1,6 +1,6 @@
 [package]
 name = "gpu-alloc-erupt"
-version = "0.8.0"
+version = "0.9.0"
 authors = ["Zakarum <zakarumych@ya.ru>"]
 edition = "2018"
 description = "`erupt` backend for `gpu-alloc`"
@@ -13,7 +13,7 @@ keywords = ["gpu", "vulkan", "allocation", "no-std"]
 categories = ["graphics", "memory-management", "no-std", "game-development"]
 
 [dependencies]
-gpu-alloc-types = { path = "../types", version = "0.2" }
+gpu-alloc-types = { path = "../types", version = "=0.3.0" }
 tracing = { version = "0.1", features = ["attributes"], optional = true }
 erupt = { version = "0.23.0", default-features = false, features = ["loading"] }
 tinyvec = { version = "1.0", default-features = false, features = ["alloc"] }
