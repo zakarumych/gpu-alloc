@@ -2,7 +2,7 @@
 
 [![crates](https://img.shields.io/crates/v/gpu-alloc.svg?style=for-the-badge&label=gpu-alloc)](https://crates.io/crates/gpu-alloc)
 [![docs](https://img.shields.io/badge/docs.rs-gpu--alloc-66c2a5?style=for-the-badge&labelColor=555555&logoColor=white)](https://docs.rs/gpu-alloc)
-[![actions](https://img.shields.io/github/workflow/status/zakarumych/gpu-alloc/Rust/master?style=for-the-badge)](https://github.com/zakarumych/gpu-alloc/actions?query=workflow%3ARust)
+[![actions](https://img.shields.io/github/workflow/status/zakarumych/gpu-alloc/Rust/main?style=for-the-badge)](https://github.com/zakarumych/gpu-alloc/actions?query=workflow%3ARust)
 [![MIT/Apache](https://img.shields.io/badge/license-MIT%2FApache-blue.svg?style=for-the-badge)](COPYING)
 ![loc](https://img.shields.io/tokei/lines/github/zakarumych/gpu-alloc?style=for-the-badge)
 

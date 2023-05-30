@@ -2,10 +2,10 @@ name: Lints
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main ]
   pull_request:
     types: [ opened, edited ]
-    branches: [ master ]
+    branches: [ main ]
     paths: 
       - '**.rs'
       - '**/Cargo.toml'
