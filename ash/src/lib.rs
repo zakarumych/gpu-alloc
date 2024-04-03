@@ -154,14 +154,14 @@ impl MemoryDevice<vk::DeviceMemory> for AshMemoryDevice {
     ) -> Result<vk::DeviceMemory, OutOfMemory> {
         assert!((flags & !(AllocationFlags::DEVICE_ADDRESS)).is_empty());
 
-        let mut info = vk::MemoryAllocateInfo::builder()
+        let mut info = vk::MemoryAllocateInfo::default()
             .allocation_size(size)
             .memory_type_index(memory_type);
 
         let mut info_flags;
 
         if flags.contains(AllocationFlags::DEVICE_ADDRESS) {
-            info_flags = vk::MemoryAllocateFlagsInfo::builder()
+            info_flags = vk::MemoryAllocateFlagsInfo::default()
                 .flags(vk::MemoryAllocateFlags::DEVICE_ADDRESS);
             info = info.push_next(&mut info_flags);
         }
@@ -217,11 +217,10 @@ impl MemoryDevice<vk::DeviceMemory> for AshMemoryDevice {
                 &ranges
                     .iter()
                     .map(|range| {
-                        vk::MappedMemoryRange::builder()
+                        vk::MappedMemoryRange::default()
                             .memory(*range.memory)
                             .offset(range.offset)
                             .size(range.size)
-                            .build()
                     })
                     .collect::<TinyVec<[_; 4]>>(),
             )
@@ -242,11 +241,10 @@ impl MemoryDevice<vk::DeviceMemory> for AshMemoryDevice {
                 &ranges
                     .iter()
                     .map(|range| {
-                        vk::MappedMemoryRange::builder()
+                        vk::MappedMemoryRange::default()
                             .memory(*range.memory)
                             .offset(range.offset)
                             .size(range.size)
-                            .build()
                     })
                     .collect::<TinyVec<[_; 4]>>(),
             )
@@ -282,7 +280,7 @@ pub unsafe fn device_properties(
 
     let buffer_device_address =
         if vk::api_version_major(version) >= 1 && vk::api_version_minor(version) >= 2 {
-            let mut features = PhysicalDeviceFeatures2::builder();
+            let mut features = PhysicalDeviceFeatures2::default();
             let mut bda_features = vk::PhysicalDeviceBufferDeviceAddressFeatures::default();
             features.p_next =
                 &mut bda_features as *mut vk::PhysicalDeviceBufferDeviceAddressFeatures as *mut _;
