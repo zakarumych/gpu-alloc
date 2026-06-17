@@ -1,11 +1,11 @@
 [package]
 name = "gpu-alloc-mock"
 version = "0.3.0"
-authors = ["Zakarum <zakarumych@ya.ru>"]
+authors = ["Zakarum <roman@barykin.me>"]
 edition = "2018"
 publish = false
 
 [dependencies]
-gpu-alloc-types = { path = "../types", version = "=0.3.0" }
+gpu-alloc-types = { path = "../types", version = "=0.3.1" }
 tracing = { version = "0.1", features = ["attributes"] }
 slab = "0.4"

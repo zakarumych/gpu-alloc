@@ -1,7 +1,7 @@
 [package]
 name = "gpu-alloc"
-version = "0.6.0"
-authors = ["Zakarum <zakarumych@ya.ru>"]
+version = "0.6.1"
+authors = ["Zakarum <roman@barykin.me>"]
 edition = "2018"
 description = "Implementation agnostic memory allocator for Vulkan like APIs"
 documentation = "https://docs.rs/gpu-alloc-types"
@@ -15,10 +15,10 @@ categories = ["graphics", "memory-management", "no-std", "game-development"]
 [features]
 std = []
 default = ["std"]
-serde = ["dep:serde", "bitflags/serde"]
+serde = ["dep:serde", "bitflags/serde", "gpu-alloc-types/serde"]
 
 [dependencies]
-gpu-alloc-types = { path = "../types", version = "=0.3.0" }
+gpu-alloc-types = { path = "../types", version = "=0.3.1" }
 tracing = { version = "0.1.27", optional = true, features = ["attributes"], default-features = false }
 bitflags = { version = "2.0", default-features = false }
 serde = { version = "1.0", optional = true, default-features = false, features = ["derive"] }

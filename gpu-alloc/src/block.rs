@@ -4,7 +4,6 @@ use {
     core::{
         convert::TryFrom as _,
         ptr::{copy_nonoverlapping, NonNull},
-        // sync::atomic::{AtomicU8, Ordering::*},
     },
     gpu_alloc_types::{MappedMemoryRange, MemoryDevice, MemoryPropertyFlags},
 };
@@ -144,9 +143,17 @@ impl<M> MemoryBlock<M> {
     where
         MD: MemoryDevice<M>,
     {
+        if !self.host_visible() {
+            return Err(MapError::NonHostVisible);
+        }
+
+        if !acquire_mapping(&mut self.mapped) {
+            return Err(MapError::AlreadyMapped);
+        }
+
         let size_u64 = u64::try_from(size).expect("`size` doesn't fit device address space");
-        assert!(offset < self.size, "`offset` is out of memory block bounds");
-        assert!(
+        debug_assert!(offset < self.size, "`offset` is out of memory block bounds");
+        debug_assert!(
             size_u64 <= self.size - offset,
             "`offset + size` is out of memory block bounds"
         );
@@ -157,9 +164,6 @@ impl<M> MemoryBlock<M> {
                     .expect("mapping end doesn't fit device address space");
                 let aligned_offset = align_down(offset, self.atom_mask);
 
-                if !acquire_mapping(&mut self.mapped) {
-                    return Err(MapError::AlreadyMapped);
-                }
                 let result =
                     device.as_ref().map_memory(memory, self.offset + aligned_offset, end - aligned_offset);
 
@@ -177,14 +181,13 @@ impl<M> MemoryBlock<M> {
             }
             MemoryBlockFlavor::FreeList { ptr: Some(ptr), .. }
             | MemoryBlockFlavor::Buddy { ptr: Some(ptr), .. } => {
-                if !acquire_mapping(&mut self.mapped) {
-                    return Err(MapError::AlreadyMapped);
-                }
                 let offset_isize = isize::try_from(offset)
                     .expect("Buddy and linear block should fit host address space");
                 ptr.as_ptr().offset(offset_isize)
             }
-            _ => return Err(MapError::NonHostVisible),
+            MemoryBlockFlavor::FreeList { ptr: None, .. } | MemoryBlockFlavor::Buddy { ptr: None, .. } => {
+                panic!("Buddy and linear block should always have a valid pointer when allocated in host-visible memory");
+            }
         };
 
         Ok(NonNull::new_unchecked(ptr))
@@ -208,6 +211,7 @@ impl<M> MemoryBlock<M> {
         if !release_mapping(&mut self.mapped) {
             return false;
         }
+
         match &mut self.flavor {
             MemoryBlockFlavor::Dedicated { memory } => {
                 device.as_ref().unmap_memory(memory);
@@ -216,6 +220,54 @@ impl<M> MemoryBlock<M> {
             MemoryBlockFlavor::FreeList { .. } => {}
         }
         true
+    }
+
+    /// Flushes memory range of this block that was previously written to by the host.
+    /// This function is a no-op if the memory is host-coherent.
+    pub unsafe fn flush_range<MD>(&mut self, device: &impl AsRef<MD>, offset: u64, size: u64) -> Result<(), MapError>
+    where
+        MD: MemoryDevice<M>,
+    {
+        if !self.host_visible() {
+            return Err(MapError::NonHostVisible);
+        }
+
+        if !self.coherent() {
+            let aligned_offset = align_down(offset, self.atom_mask);
+            let end = align_up(offset + size, self.atom_mask).unwrap();
+
+            device.as_ref().flush_memory_ranges(&[MappedMemoryRange {
+                memory: self.memory(),
+                offset: self.offset + aligned_offset,
+                size: end - aligned_offset,
+            }])?;
+        }
+
+        Ok(())
+    }
+
+    /// Invalidates memory range of this block that was previously written to by the device.
+    /// This function is a no-op if the memory is host-coherent.
+    pub unsafe fn invalidate_range<MD>(&mut self, device: &impl AsRef<MD>, offset: u64, size: u64) -> Result<(), MapError>
+    where
+        MD: MemoryDevice<M>,
+    {
+        if !self.host_visible() {
+            return Err(MapError::NonHostVisible);
+        }
+
+        if !self.coherent() {
+            let aligned_offset = align_down(offset, self.atom_mask);
+            let end = align_up(offset + size, self.atom_mask).unwrap();
+
+            device.as_ref().invalidate_memory_ranges(&[MappedMemoryRange {
+                memory: self.memory(),
+                offset: self.offset + aligned_offset,
+                size: end - aligned_offset,
+            }])?;
+        }
+
+        Ok(())
     }
 
     /// Transiently maps block memory range and copies specified data
@@ -243,21 +295,11 @@ impl<M> MemoryBlock<M> {
         let ptr = self.map(device, offset, size)?;
 
         copy_nonoverlapping(data.as_ptr(), ptr.as_ptr(), size);
-        let result = if !self.coherent() {
-            let aligned_offset = align_down(offset, self.atom_mask);
-            let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
-
-            device.as_ref().flush_memory_ranges(&[MappedMemoryRange {
-                memory: self.memory(),
-                offset: self.offset + aligned_offset,
-                size: end - aligned_offset,
-            }])
-        } else {
-            Ok(())
-        };
+        
+        let result = self.flush_range(device, offset, size as u64);
 
         self.unmap(device);
-        result.map_err(Into::into)
+        result
     }
 
     /// Transiently maps block memory range and copies specified data
@@ -290,24 +332,18 @@ impl<M> MemoryBlock<M> {
 
         let size = data.len();
         let ptr = self.map(device, offset, size)?;
-        let result = if !self.coherent() {
-            let aligned_offset = align_down(offset, self.atom_mask);
-            let end = align_up(offset + data.len() as u64, self.atom_mask).unwrap();
+        let result = self.invalidate_range(device, offset, size as u64);
 
-            device.as_ref().invalidate_memory_ranges(&[MappedMemoryRange {
-                memory: self.memory(),
-                offset: self.offset + aligned_offset,
-                size: end - aligned_offset,
-            }])
-        } else {
-            Ok(())
-        };
         if result.is_ok() {
             copy_nonoverlapping(ptr.as_ptr(), data.as_mut_ptr(), size);
         }
 
         self.unmap(device);
-        result.map_err(Into::into)
+        result
+    }
+
+    fn host_visible(&self) -> bool {
+        self.props.contains(MemoryPropertyFlags::HOST_VISIBLE)
     }
 
     fn coherent(&self) -> bool {
