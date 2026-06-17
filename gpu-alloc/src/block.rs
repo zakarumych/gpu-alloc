@@ -136,7 +136,7 @@ impl<M> MemoryBlock<M> {
     #[inline(always)]
     pub unsafe fn map<MD>(
         &mut self,
-        device: &impl AsRef<MD>,
+        device: impl AsRef<MD>,
         offset: u64,
         size: usize,
     ) -> Result<NonNull<u8>, MapError>
@@ -204,7 +204,7 @@ impl<M> MemoryBlock<M> {
     ///
     /// `block` must have been allocated from specified `device`.
     #[inline(always)]
-    pub unsafe fn unmap<MD>(&mut self, device: &impl AsRef<MD>) -> bool
+    pub unsafe fn unmap<MD>(&mut self, device: impl AsRef<MD>) -> bool
     where
         MD: MemoryDevice<M>,
     {
@@ -224,7 +224,7 @@ impl<M> MemoryBlock<M> {
 
     /// Flushes memory range of this block that was previously written to by the host.
     /// This function is a no-op if the memory is host-coherent.
-    pub unsafe fn flush_range<MD>(&mut self, device: &impl AsRef<MD>, offset: u64, size: u64) -> Result<(), MapError>
+    pub unsafe fn flush_range<MD>(&mut self, device: impl AsRef<MD>, offset: u64, size: u64) -> Result<(), MapError>
     where
         MD: MemoryDevice<M>,
     {
@@ -248,7 +248,7 @@ impl<M> MemoryBlock<M> {
 
     /// Invalidates memory range of this block that was previously written to by the device.
     /// This function is a no-op if the memory is host-coherent.
-    pub unsafe fn invalidate_range<MD>(&mut self, device: &impl AsRef<MD>, offset: u64, size: u64) -> Result<(), MapError>
+    pub unsafe fn invalidate_range<MD>(&mut self, device: impl AsRef<MD>, offset: u64, size: u64) -> Result<(), MapError>
     where
         MD: MemoryDevice<M>,
     {
@@ -284,7 +284,7 @@ impl<M> MemoryBlock<M> {
     #[inline(always)]
     pub unsafe fn write_bytes<MD>(
         &mut self,
-        device: &impl AsRef<MD>,
+        device: impl AsRef<MD>,
         offset: u64,
         data: &[u8],
     ) -> Result<(), MapError>
@@ -316,7 +316,7 @@ impl<M> MemoryBlock<M> {
     #[inline(always)]
     pub unsafe fn read_bytes<MD>(
         &mut self,
-        device: &impl AsRef<MD>,
+        device: impl AsRef<MD>,
         offset: u64,
         data: &mut [u8],
     ) -> Result<(), MapError>

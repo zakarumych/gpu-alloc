@@ -9,7 +9,7 @@ publish = false
 mock = ["gpu-alloc-mock"]
 
 [dependencies]
-gpu-alloc = { path = "../gpu-alloc", version = "=0.6.1", features = [
+gpu-alloc = { path = "../gpu-alloc", version = "=0.6.2", features = [
     "tracing",
 ] }
 eyre = "0.6"

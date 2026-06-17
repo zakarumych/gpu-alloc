@@ -1,6 +1,6 @@
 [package]
 name = "gpu-alloc"
-version = "0.6.1"
+version = "0.6.2"
 authors = ["Zakarum <roman@barykin.me>"]
 edition = "2018"
 description = "Implementation agnostic memory allocator for Vulkan like APIs"

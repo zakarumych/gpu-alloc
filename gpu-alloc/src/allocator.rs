@@ -124,7 +124,7 @@ where
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
     pub unsafe fn alloc<MD>(
         &mut self,
-        device: &impl AsRef<MD>,
+        device: impl AsRef<MD>,
         request: Request,
     ) -> Result<MemoryBlock<M>, AllocationError>
     where
@@ -146,7 +146,7 @@ where
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
     pub unsafe fn alloc_with_dedicated<MD>(
         &mut self,
-        device: &impl AsRef<MD>,
+        device: impl AsRef<MD>,
         request: Request,
         dedicated: Dedicated,
     ) -> Result<MemoryBlock<M>, AllocationError>
@@ -489,7 +489,7 @@ where
     /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
     ///   and memory blocks allocated from it
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
-    pub unsafe fn dealloc<MD>(&mut self, device: &impl AsRef<MD>, block: MemoryBlock<M>)
+    pub unsafe fn dealloc<MD>(&mut self, device: impl AsRef<MD>, block: MemoryBlock<M>)
     where
         MD: MemoryDevice<M>,
     {
@@ -589,7 +589,7 @@ where
     /// * Same `device` instance must be used for all interactions with one `GpuAllocator` instance
     ///   and memory blocks allocated from it
     #[cfg_attr(feature = "tracing", tracing::instrument(skip(self, device)))]
-    pub unsafe fn cleanup<MD>(&mut self, device: &impl AsRef<MD>)
+    pub unsafe fn cleanup<MD>(&mut self, device: impl AsRef<MD>)
     where
         MD: MemoryDevice<M>,
     {
