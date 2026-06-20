@@ -18,7 +18,7 @@ jobs:
   readme:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Install cargo-readme
       uses: actions-rs/install@v0.1
       with:
